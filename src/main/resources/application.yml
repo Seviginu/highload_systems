@@ -19,9 +19,6 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-  elasticsearch:
-    uris: ${ELASTICSEARCH_URL:http://localhost:9200}
-
 server:
   port: ${SERVER_PORT:8080}
 
@@ -36,10 +33,6 @@ management:
         enabled: true
 
 logging:
-  file:
-    name: ${LOG_FILE:logs/application.log}
   structured:
     format:
       console: ecs
-      file: ecs
-
