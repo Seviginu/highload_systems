@@ -1,10 +1,12 @@
 package itmo.label.entity;
 
+import itmo.task.entity.Task;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -12,6 +14,8 @@ import jakarta.validation.constraints.Size;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "labels")
@@ -36,6 +40,9 @@ public class Label {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    @ManyToMany(mappedBy = "labels")
+    private Set<Task> tasks = new LinkedHashSet<>();
 
     protected Label() {
     }
@@ -64,5 +71,17 @@ public class Label {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Set<Task> getTasks() {
+        return Set.copyOf(tasks);
+    }
+
+    public void addTask(Task task) {
+        tasks.add(task);
+    }
+
+    public void removeTask(Task task) {
+        tasks.remove(task);
     }
 }
