@@ -3,10 +3,12 @@ package itmo.task;
 import itmo.label.entity.Label;
 import itmo.label.repository.LabelRepository;
 import itmo.project.entity.Project;
+import itmo.project.entity.ProjectMember;
 import itmo.project.entity.ProjectStatus;
 import itmo.project.repository.ProjectMemberRepository;
 import itmo.project.repository.ProjectRepository;
 import itmo.task.dto.CreateTaskRequest;
+import itmo.task.dto.MoveTaskRequest;
 import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
 import itmo.task.entity.Task;
@@ -260,6 +262,65 @@ class TaskIT {
     }
 
     @Test
+    void shouldMoveTaskAtomicallyAndRejectNonMemberAssignee() {
+        TestData data = createTestData();
+        Project targetProject = projectRepository.saveAndFlush(
+                new Project("Mobile", "MOBILE", null, ProjectStatus.ACTIVE)
+        );
+        Project rejectedProject = projectRepository.saveAndFlush(
+                new Project("Analytics", "ANALYTICS", null, ProjectStatus.ACTIVE)
+        );
+        Label targetLabel = labelRepository.saveAndFlush(new Label("Mobile", "#445566"));
+        projectMemberRepository.saveAndFlush(new ProjectMember(targetProject, data.assignee()));
+        TaskResponse created = restTemplate.postForEntity(
+                "/api/tasks",
+                createRequest(data, "PLATFORM-1"),
+                TaskResponse.class
+        ).getBody();
+        assertThat(created).isNotNull();
+
+        var moveResponse = restTemplate.postForEntity(
+                "/api/tasks/{id}/move",
+                new MoveTaskRequest(
+                        targetProject.getId(),
+                        data.assignee().getId(),
+                        Set.of(targetLabel.getId()),
+                        created.version()
+                ),
+                TaskResponse.class,
+                created.id()
+        );
+
+        assertThat(moveResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        TaskResponse moved = moveResponse.getBody();
+        assertThat(moved).isNotNull();
+        assertThat(moved.projectId()).isEqualTo(targetProject.getId());
+        assertThat(moved.assigneeId()).isEqualTo(data.assignee().getId());
+        assertThat(moved.labelIds()).containsExactly(targetLabel.getId());
+        assertThat(moved.version()).isEqualTo(created.version() + 1);
+
+        var rejectedResponse = restTemplate.postForEntity(
+                "/api/tasks/{id}/move",
+                new MoveTaskRequest(
+                        rejectedProject.getId(),
+                        data.assignee().getId(),
+                        Set.of(data.label().getId()),
+                        moved.version()
+                ),
+                String.class,
+                created.id()
+        );
+
+        assertThat(rejectedResponse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(rejectedResponse.getBody()).contains("not an active member");
+        Task persisted = taskRepository.findById(created.id()).orElseThrow();
+        assertThat(persisted.getProject().getId()).isEqualTo(targetProject.getId());
+        assertThat(persisted.getAssignee().getId()).isEqualTo(data.assignee().getId());
+        assertThat(persisted.getLabels()).extracting(Label::getId).containsExactly(targetLabel.getId());
+        assertThat(persisted.getVersion()).isEqualTo(moved.version());
+    }
+
+    @Test
     void shouldValidateTaskEntity() {
         TestData data = createTestData();
         Task invalidTask = new Task(
@@ -296,6 +357,7 @@ class TaskIT {
         assertThat(openApi.getBody())
                 .contains("/api/tasks")
                 .contains("/api/tasks/feed")
+                .contains("/api/tasks/{id}/move")
                 .contains("X-Total-Count")
                 .contains("X-Next-Cursor")
                 .contains("TaskResponse")

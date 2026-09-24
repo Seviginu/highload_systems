@@ -62,6 +62,12 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public boolean isActiveMember(Long projectId, Long userId) {
+        return memberRepository.existsByProjectIdAndUserIdAndActiveTrue(projectId, userId);
+    }
+
+    @Override
     @Transactional
     public void deactivate(Long projectId, Long memberId) {
         ensureProjectExists(projectId);

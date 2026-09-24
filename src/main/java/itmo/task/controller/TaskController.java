@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import itmo.common.web.ApiError;
 import itmo.task.dto.CreateTaskRequest;
+import itmo.task.dto.MoveTaskRequest;
 import itmo.task.dto.TaskFeedResponse;
 import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
@@ -199,6 +200,37 @@ public class TaskController {
             @Valid @RequestBody UpdateTaskRequest request
     ) {
         return taskService.update(id, request);
+    }
+
+    @PostMapping("/{id}/move")
+    @Operation(summary = "Move a task to another project")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Task moved",
+                    content = @Content(schema = @Schema(implementation = TaskResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Request validation failed",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Task or related resource not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Assignee membership or version conflict",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))
+            )
+    })
+    public TaskResponse move(
+            @PathVariable Long id,
+            @Valid @RequestBody MoveTaskRequest request
+    ) {
+        return taskService.move(id, request);
     }
 
     @DeleteMapping("/{id}")

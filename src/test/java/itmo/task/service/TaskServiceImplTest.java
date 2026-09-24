@@ -8,8 +8,10 @@ import itmo.label.service.LabelService;
 import itmo.project.dto.ProjectResponse;
 import itmo.project.entity.Project;
 import itmo.project.entity.ProjectStatus;
+import itmo.project.service.ProjectMemberService;
 import itmo.project.service.ProjectService;
 import itmo.task.dto.CreateTaskRequest;
+import itmo.task.dto.MoveTaskRequest;
 import itmo.task.dto.UpdateTaskRequest;
 import itmo.task.entity.Task;
 import itmo.task.entity.TaskPriority;
@@ -55,6 +57,9 @@ class TaskServiceImplTest {
     private ProjectService projectService;
 
     @Mock
+    private ProjectMemberService projectMemberService;
+
+    @Mock
     private UserService userService;
 
     @Mock
@@ -74,6 +79,7 @@ class TaskServiceImplTest {
                 taskRepository,
                 new TaskMapper(),
                 projectService,
+                projectMemberService,
                 userService,
                 labelService,
                 entityManager
@@ -173,6 +179,52 @@ class TaskServiceImplTest {
         assertThat(firstPage.nextCursor()).isEqualTo(10L);
         assertThat(lastPage.tasks()).hasSize(1);
         assertThat(lastPage.nextCursor()).isNull();
+    }
+
+    @Test
+    void shouldMoveTaskWhenAssigneeIsTargetProjectMember() {
+        Task task = task();
+        Project targetProject = new Project("Mobile", "MOBILE", null, ProjectStatus.ACTIVE);
+        User assignee = new User("Developer", "developer@example.com", UserRole.DEVELOPER);
+        ReflectionTestUtils.setField(targetProject, "id", 4L);
+        ReflectionTestUtils.setField(assignee, "id", 5L);
+        when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
+        when(projectService.findById(4L)).thenReturn(projectResponse());
+        when(userService.findById(5L)).thenReturn(userResponse());
+        when(projectMemberService.isActiveMember(4L, 5L)).thenReturn(true);
+        when(labelService.findById(3L)).thenReturn(labelResponse());
+        when(entityManager.getReference(Project.class, 4L)).thenReturn(targetProject);
+        when(entityManager.getReference(User.class, 5L)).thenReturn(assignee);
+        when(entityManager.getReference(Label.class, 3L)).thenReturn(label);
+        when(taskRepository.saveAndFlush(task)).thenReturn(task);
+
+        var response = taskService.move(10L, new MoveTaskRequest(4L, 5L, Set.of(3L), 0L));
+
+        assertThat(response.projectId()).isEqualTo(4L);
+        assertThat(response.assigneeId()).isEqualTo(5L);
+        assertThat(response.labelIds()).containsExactly(3L);
+    }
+
+    @Test
+    void shouldRejectMoveWhenAssigneeIsNotTargetProjectMember() {
+        Task task = task();
+        Project targetProject = new Project("Mobile", "MOBILE", null, ProjectStatus.ACTIVE);
+        User assignee = new User("Developer", "developer@example.com", UserRole.DEVELOPER);
+        ReflectionTestUtils.setField(targetProject, "id", 4L);
+        ReflectionTestUtils.setField(assignee, "id", 5L);
+        when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
+        when(projectService.findById(4L)).thenReturn(projectResponse());
+        when(userService.findById(5L)).thenReturn(userResponse());
+        when(entityManager.getReference(Project.class, 4L)).thenReturn(targetProject);
+        when(entityManager.getReference(User.class, 5L)).thenReturn(assignee);
+
+        assertThatThrownBy(() -> taskService.move(
+                10L,
+                new MoveTaskRequest(4L, 5L, Set.of(3L), 0L)
+        )).isInstanceOf(ConflictException.class)
+                .hasMessageContaining("not an active member");
+        assertThat(task.getProject().getId()).isEqualTo(1L);
+        verify(taskRepository, never()).saveAndFlush(task);
     }
 
     @Test

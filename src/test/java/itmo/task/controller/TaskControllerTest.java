@@ -4,6 +4,7 @@ import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
 import itmo.common.web.GlobalExceptionHandler;
 import itmo.task.dto.CreateTaskRequest;
+import itmo.task.dto.MoveTaskRequest;
 import itmo.task.dto.TaskFeedResponse;
 import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
@@ -121,6 +122,40 @@ class TaskControllerTest {
                         .content(validUpdateRequest()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.taskKey").value("PLATFORM-1"));
+    }
+
+    @Test
+    void shouldMoveTask() throws Exception {
+        when(taskService.move(any(Long.class), any(MoveTaskRequest.class))).thenReturn(response);
+
+        mockMvc.perform(post("/api/tasks/1/move")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "projectId": 4,
+                                  "assigneeId": 3,
+                                  "labelIds": [5],
+                                  "version": 0
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.projectId").value(4));
+    }
+
+    @Test
+    void shouldValidateMoveRequest() throws Exception {
+        mockMvc.perform(post("/api/tasks/1/move")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "projectId": 0,
+                                  "assigneeId": -1,
+                                  "labelIds": null,
+                                  "version": -1
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors").isNotEmpty());
     }
 
     @Test

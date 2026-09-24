@@ -5,8 +5,10 @@ import itmo.common.exception.ResourceNotFoundException;
 import itmo.label.entity.Label;
 import itmo.label.service.LabelService;
 import itmo.project.entity.Project;
+import itmo.project.service.ProjectMemberService;
 import itmo.project.service.ProjectService;
 import itmo.task.dto.CreateTaskRequest;
+import itmo.task.dto.MoveTaskRequest;
 import itmo.task.dto.TaskFeedResponse;
 import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
@@ -35,6 +37,7 @@ public class TaskServiceImpl implements TaskService {
     private final TaskRepository taskRepository;
     private final TaskMapper taskMapper;
     private final ProjectService projectService;
+    private final ProjectMemberService projectMemberService;
     private final UserService userService;
     private final LabelService labelService;
     private final EntityManager entityManager;
@@ -43,6 +46,7 @@ public class TaskServiceImpl implements TaskService {
             TaskRepository taskRepository,
             TaskMapper taskMapper,
             ProjectService projectService,
+            ProjectMemberService projectMemberService,
             UserService userService,
             LabelService labelService,
             EntityManager entityManager
@@ -50,6 +54,7 @@ public class TaskServiceImpl implements TaskService {
         this.taskRepository = taskRepository;
         this.taskMapper = taskMapper;
         this.projectService = projectService;
+        this.projectMemberService = projectMemberService;
         this.userService = userService;
         this.labelService = labelService;
         this.entityManager = entityManager;
@@ -100,6 +105,32 @@ public class TaskServiceImpl implements TaskService {
                 ? tasks.get(tasks.size() - 1).id()
                 : null;
         return new TaskFeedResponse(tasks, nextCursor);
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse move(Long id, MoveTaskRequest request) {
+        Task task = findEntity(id);
+        if (!Objects.equals(task.getVersion(), request.version())) {
+            throw versionConflict(id);
+        }
+
+        Project project = resolveProject(request.projectId());
+        User assignee = resolveOptionalUser(request.assigneeId());
+        if (assignee != null && !projectMemberService.isActiveMember(request.projectId(), request.assigneeId())) {
+            throw new ConflictException(
+                    "User with id '%d' is not an active member of project '%d'"
+                            .formatted(request.assigneeId(), request.projectId())
+            );
+        }
+        Set<Label> labels = resolveLabels(request.labelIds());
+        task.move(project, assignee, labels);
+
+        try {
+            return taskMapper.toResponse(taskRepository.saveAndFlush(task));
+        } catch (OptimisticLockingFailureException exception) {
+            throw versionConflict(id);
+        }
     }
 
     @Override

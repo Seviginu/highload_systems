@@ -137,6 +137,13 @@ class ProjectMemberServiceImplTest {
     }
 
     @Test
+    void shouldCheckActiveMembership() {
+        when(memberRepository.existsByProjectIdAndUserIdAndActiveTrue(1L, 2L)).thenReturn(true);
+
+        assertThat(memberService.isActiveMember(1L, 2L)).isTrue();
+    }
+
+    @Test
     void shouldDeactivateMember() {
         ProjectMember member = new ProjectMember(project, user);
         when(projectRepository.existsById(1L)).thenReturn(true);

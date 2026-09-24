@@ -13,5 +13,7 @@ public interface ProjectMemberService {
 
     Page<ProjectMemberResponse> findAll(Long projectId, Pageable pageable);
 
+    boolean isActiveMember(Long projectId, Long userId);
+
     void deactivate(Long projectId, Long memberId);
 }

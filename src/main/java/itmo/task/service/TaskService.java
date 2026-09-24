@@ -1,6 +1,7 @@
 package itmo.task.service;
 
 import itmo.task.dto.CreateTaskRequest;
+import itmo.task.dto.MoveTaskRequest;
 import itmo.task.dto.TaskFeedResponse;
 import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
@@ -16,6 +17,8 @@ public interface TaskService {
     Page<TaskResponse> findAll(Pageable pageable);
 
     TaskFeedResponse findFeed(Long afterId, int limit);
+
+    TaskResponse move(Long id, MoveTaskRequest request);
 
     TaskResponse update(Long id, UpdateTaskRequest request);
 

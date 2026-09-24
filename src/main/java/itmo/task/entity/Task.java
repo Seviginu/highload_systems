@@ -151,6 +151,16 @@ public class Task {
         replaceLabels(labels);
     }
 
+    public void move(Project project, User assignee, Set<Label> labels) {
+        if (this.project != project) {
+            this.project.removeTask(this);
+            this.project = project;
+            project.addTask(this);
+        }
+        this.assignee = assignee;
+        replaceLabels(labels);
+    }
+
     private void replaceLabels(Set<Label> newLabels) {
         labels.forEach(label -> label.removeTask(this));
         labels.clear();
