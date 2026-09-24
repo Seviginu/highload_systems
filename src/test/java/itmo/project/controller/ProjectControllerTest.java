@@ -133,7 +133,7 @@ class ProjectControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Request validation failed"))
                 .andExpect(jsonPath("$.path").value("/api/projects"))
-                .andExpect(jsonPath("$.fieldErrors.length()").value(3));
+                .andExpect(jsonPath("$.fieldErrors.length()").value(4));
     }
 
     @Test
@@ -180,7 +180,8 @@ class ProjectControllerTest {
                   "name": "Platform",
                   "code": "PLATFORM",
                   "description": "Main platform",
-                  "status": "ACTIVE"
+                  "status": "ACTIVE",
+                  "teamLeadId": 1
                 }
                 """;
     }

@@ -34,11 +34,14 @@ class ProjectServiceImplTest {
     @Mock
     private ProjectRepository projectRepository;
 
+    @Mock
+    private ProjectMemberService projectMemberService;
+
     private ProjectServiceImpl projectService;
 
     @BeforeEach
     void setUp() {
-        projectService = new ProjectServiceImpl(projectRepository, new ProjectMapper());
+        projectService = new ProjectServiceImpl(projectRepository, new ProjectMapper(), projectMemberService);
     }
 
     @Test
@@ -52,6 +55,7 @@ class ProjectServiceImplTest {
         assertThat(response.name()).isEqualTo("Platform");
         assertThat(response.code()).isEqualTo("PLATFORM");
         verify(projectRepository).saveAndFlush(any(Project.class));
+        verify(projectMemberService).assignTeamLead(null, 1L);
     }
 
     @Test
@@ -180,7 +184,7 @@ class ProjectServiceImplTest {
     }
 
     private CreateProjectRequest request(String name, String code, ProjectStatus status) {
-        return new CreateProjectRequest(name, code, "Description", status);
+        return new CreateProjectRequest(name, code, "Description", status, 1L);
     }
 
     private Project project(String name, String code, ProjectStatus status) {

@@ -19,10 +19,16 @@ public class ProjectServiceImpl implements ProjectService {
 
     private final ProjectRepository projectRepository;
     private final ProjectMapper projectMapper;
+    private final ProjectMemberService projectMemberService;
 
-    public ProjectServiceImpl(ProjectRepository projectRepository, ProjectMapper projectMapper) {
+    public ProjectServiceImpl(
+            ProjectRepository projectRepository,
+            ProjectMapper projectMapper,
+            ProjectMemberService projectMemberService
+    ) {
         this.projectRepository = projectRepository;
         this.projectMapper = projectMapper;
+        this.projectMemberService = projectMemberService;
     }
 
     @Override
@@ -32,7 +38,9 @@ public class ProjectServiceImpl implements ProjectService {
         ensureCodeAvailable(normalizedCode);
 
         try {
-            return projectMapper.toResponse(projectRepository.saveAndFlush(projectMapper.toEntity(request)));
+            Project project = projectRepository.saveAndFlush(projectMapper.toEntity(request));
+            projectMemberService.assignTeamLead(project.getId(), request.teamLeadId());
+            return projectMapper.toResponse(project);
         } catch (DataIntegrityViolationException exception) {
             throw codeConflict(normalizedCode);
         }

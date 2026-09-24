@@ -18,7 +18,8 @@ class ProjectMapperTest {
                 "  Platform  ",
                 " platform_1 ",
                 "  Main platform  ",
-                ProjectStatus.PLANNED
+                ProjectStatus.PLANNED,
+                1L
         );
 
         Project project = mapper.toEntity(request);
@@ -50,7 +51,7 @@ class ProjectMapperTest {
     @Test
     void shouldKeepNullDescription() {
         Project project = mapper.toEntity(
-                new CreateProjectRequest("Platform", "PLATFORM", null, ProjectStatus.ACTIVE)
+                new CreateProjectRequest("Platform", "PLATFORM", null, ProjectStatus.ACTIVE, 1L)
         );
 
         assertThat(project.getDescription()).isNull();

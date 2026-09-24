@@ -1,11 +1,17 @@
 package itmo.project;
 
+import itmo.project.dto.AddProjectMemberRequest;
 import itmo.project.dto.CreateProjectRequest;
+import itmo.project.dto.ProjectMemberResponse;
 import itmo.project.dto.ProjectResponse;
 import itmo.project.dto.UpdateProjectRequest;
 import itmo.project.entity.Project;
 import itmo.project.entity.ProjectStatus;
+import itmo.project.repository.ProjectMemberRepository;
 import itmo.project.repository.ProjectRepository;
+import itmo.user.entity.User;
+import itmo.user.entity.UserRole;
+import itmo.user.repository.UserRepository;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,6 +50,12 @@ class ProjectIT {
     private ProjectRepository projectRepository;
 
     @Autowired
+    private ProjectMemberRepository projectMemberRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
@@ -51,7 +63,9 @@ class ProjectIT {
 
     @BeforeEach
     void cleanDatabase() {
+        projectMemberRepository.deleteAll();
         projectRepository.deleteAll();
+        userRepository.deleteAll();
     }
 
     @Test
@@ -70,13 +84,15 @@ class ProjectIT {
 
     @Test
     void shouldPerformProjectCrudThroughHttp() {
+        Long teamLeadId = createTeamLead().getId();
         var createResponse = restTemplate.postForEntity(
                 "/api/projects",
                 new CreateProjectRequest(
                         "Platform",
                         "platform",
                         "Main platform",
-                        ProjectStatus.PLANNED
+                        ProjectStatus.PLANNED,
+                        teamLeadId
                 ),
                 ProjectResponse.class
         );
@@ -138,21 +154,102 @@ class ProjectIT {
 
     @Test
     void shouldRejectDuplicateNormalizedCode() {
+        Long teamLeadId = createTeamLead().getId();
         var firstResponse = restTemplate.postForEntity(
                 "/api/projects",
-                new CreateProjectRequest("Platform", "platform", null, ProjectStatus.ACTIVE),
+                new CreateProjectRequest("Platform", "platform", null, ProjectStatus.ACTIVE, teamLeadId),
                 ProjectResponse.class
         );
         assertThat(firstResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
 
         var duplicateResponse = restTemplate.postForEntity(
                 "/api/projects",
-                new CreateProjectRequest("Another", "PLATFORM", null, ProjectStatus.PLANNED),
+                new CreateProjectRequest("Another", "PLATFORM", null, ProjectStatus.PLANNED, teamLeadId),
                 String.class
         );
         assertThat(duplicateResponse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(duplicateResponse.getBody()).contains("already exists");
         assertThat(projectRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldManageProjectMembersThroughHttp() {
+        User teamLead = createTeamLead();
+        User developer = userRepository.saveAndFlush(
+                new User("Developer", "developer@example.com", UserRole.DEVELOPER)
+        );
+        ProjectResponse project = restTemplate.postForEntity(
+                "/api/projects",
+                new CreateProjectRequest(
+                        "Platform",
+                        "PLATFORM",
+                        null,
+                        ProjectStatus.ACTIVE,
+                        teamLead.getId()
+                ),
+                ProjectResponse.class
+        ).getBody();
+        assertThat(project).isNotNull();
+
+        var addResponse = restTemplate.postForEntity(
+                "/api/projects/{projectId}/members",
+                new AddProjectMemberRequest(developer.getId()),
+                ProjectMemberResponse.class,
+                project.id()
+        );
+
+        assertThat(addResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        ProjectMemberResponse addedMember = addResponse.getBody();
+        assertThat(addedMember).isNotNull();
+        assertThat(addedMember.userId()).isEqualTo(developer.getId());
+        assertThat(addedMember.active()).isTrue();
+
+        var listResponse = restTemplate.getForEntity(
+                "/api/projects/{projectId}/members?page=0&size=20",
+                ProjectMemberResponse[].class,
+                project.id()
+        );
+        assertThat(listResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(listResponse.getHeaders().getFirst("X-Total-Count")).isEqualTo("2");
+        assertThat(listResponse.getBody()).extracting(ProjectMemberResponse::userId)
+                .containsExactlyInAnyOrder(teamLead.getId(), developer.getId());
+
+        var invalidPageResponse = restTemplate.getForEntity(
+                "/api/projects/{projectId}/members?size=51",
+                String.class,
+                project.id()
+        );
+        assertThat(invalidPageResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
+        var deactivateResponse = restTemplate.exchange(
+                "/api/projects/{projectId}/members/{memberId}",
+                HttpMethod.DELETE,
+                HttpEntity.EMPTY,
+                Void.class,
+                project.id(),
+                addedMember.id()
+        );
+        assertThat(deactivateResponse.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(projectMemberRepository.findById(addedMember.id()).orElseThrow().isActive()).isFalse();
+    }
+
+    @Test
+    void shouldRollbackProjectWhenTeamLeadAssignmentFails() {
+        var response = restTemplate.postForEntity(
+                "/api/projects",
+                new CreateProjectRequest(
+                        "Platform",
+                        "PLATFORM",
+                        null,
+                        ProjectStatus.ACTIVE,
+                        999_999L
+                ),
+                String.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(projectRepository.count()).isZero();
+        assertThat(projectMemberRepository.count()).isZero();
     }
 
     @Test
@@ -181,8 +278,14 @@ class ProjectIT {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody())
                 .contains("/api/projects")
+                .contains("/api/projects/{projectId}/members")
                 .contains("X-Total-Count")
                 .contains("ProjectResponse")
+                .contains("ProjectMemberResponse")
                 .contains("ApiError");
+    }
+
+    private User createTeamLead() {
+        return userRepository.saveAndFlush(new User("Team Lead", "lead@example.com", UserRole.TEAM_LEAD));
     }
 }

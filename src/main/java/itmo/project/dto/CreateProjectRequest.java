@@ -4,6 +4,7 @@ import itmo.project.entity.ProjectStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 public record CreateProjectRequest(
@@ -22,6 +23,10 @@ public record CreateProjectRequest(
         String description,
 
         @NotNull(message = "Status is required")
-        ProjectStatus status
+        ProjectStatus status,
+
+        @NotNull(message = "Team lead is required")
+        @Positive(message = "Team lead id must be positive")
+        Long teamLeadId
 ) {
 }
