@@ -30,6 +30,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
@@ -154,6 +155,24 @@ class TaskServiceImplTest {
 
         assertThat(taskService.findById(10L).taskKey()).isEqualTo("PLATFORM-1");
         assertThat(taskService.findAll(pageable).getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldReadCursorFeedWithAndWithoutCursor() {
+        Task task = task();
+        PageRequest pageable = PageRequest.of(0, 2);
+        when(taskRepository.findAllByOrderByIdAsc(pageable))
+                .thenReturn(new SliceImpl<>(List.of(task), pageable, true));
+        when(taskRepository.findByIdGreaterThanOrderByIdAsc(10L, pageable))
+                .thenReturn(new SliceImpl<>(List.of(task), pageable, false));
+
+        var firstPage = taskService.findFeed(null, 2);
+        var lastPage = taskService.findFeed(10L, 2);
+
+        assertThat(firstPage.tasks()).extracting(response -> response.id()).containsExactly(10L);
+        assertThat(firstPage.nextCursor()).isEqualTo(10L);
+        assertThat(lastPage.tasks()).hasSize(1);
+        assertThat(lastPage.nextCursor()).isNull();
     }
 
     @Test

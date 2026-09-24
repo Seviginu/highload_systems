@@ -39,7 +39,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "logging.file.name=target/task-it.log"
+        properties = {
+                "logging.file.name=target/task-it.log",
+                "spring.jpa.properties.hibernate.session_factory.statement_inspector=itmo.task.SqlStatementInspector"
+        }
 )
 class TaskIT {
 
@@ -219,6 +222,44 @@ class TaskIT {
     }
 
     @Test
+    void shouldReadTaskFeedByCursorWithoutCountQuery() {
+        TestData data = createTestData();
+        TaskResponse first = restTemplate.postForEntity(
+                "/api/tasks", createRequest(data, "PLATFORM-1"), TaskResponse.class
+        ).getBody();
+        TaskResponse second = restTemplate.postForEntity(
+                "/api/tasks", createRequest(data, "PLATFORM-2"), TaskResponse.class
+        ).getBody();
+        TaskResponse third = restTemplate.postForEntity(
+                "/api/tasks", createRequest(data, "PLATFORM-3"), TaskResponse.class
+        ).getBody();
+        assertThat(first).isNotNull();
+        assertThat(second).isNotNull();
+        assertThat(third).isNotNull();
+
+        SqlStatementInspector.clear();
+        var firstPage = restTemplate.getForEntity("/api/tasks/feed?limit=2", TaskResponse[].class);
+
+        assertThat(firstPage.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(firstPage.getBody()).extracting(TaskResponse::id)
+                .containsExactly(first.id(), second.id());
+        assertThat(firstPage.getHeaders().getFirst("X-Next-Cursor"))
+                .isEqualTo(String.valueOf(second.id()));
+        assertThat(SqlStatementInspector.statements())
+                .noneMatch(sql -> sql.toLowerCase().contains("count("));
+
+        var lastPage = restTemplate.getForEntity(
+                "/api/tasks/feed?afterId={afterId}&limit=2",
+                TaskResponse[].class,
+                second.id()
+        );
+
+        assertThat(lastPage.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(lastPage.getBody()).extracting(TaskResponse::id).containsExactly(third.id());
+        assertThat(lastPage.getHeaders().containsKey("X-Next-Cursor")).isFalse();
+    }
+
+    @Test
     void shouldValidateTaskEntity() {
         TestData data = createTestData();
         Task invalidTask = new Task(
@@ -244,12 +285,19 @@ class TaskIT {
     void shouldRejectPageSizeAboveFiftyAndExposeOpenApi() {
         var invalidPage = restTemplate.getForEntity("/api/tasks?size=51", String.class);
         assertThat(invalidPage.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        var invalidFeed = restTemplate.getForEntity(
+                "/api/tasks/feed?afterId=-1&limit=51",
+                String.class
+        );
+        assertThat(invalidFeed.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 
         var openApi = restTemplate.getForEntity("/v3/api-docs", String.class);
         assertThat(openApi.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(openApi.getBody())
                 .contains("/api/tasks")
+                .contains("/api/tasks/feed")
                 .contains("X-Total-Count")
+                .contains("X-Next-Cursor")
                 .contains("TaskResponse")
                 .contains("ApiError");
     }

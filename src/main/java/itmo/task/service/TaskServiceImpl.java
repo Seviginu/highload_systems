@@ -7,6 +7,7 @@ import itmo.label.service.LabelService;
 import itmo.project.entity.Project;
 import itmo.project.service.ProjectService;
 import itmo.task.dto.CreateTaskRequest;
+import itmo.task.dto.TaskFeedResponse;
 import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
 import itmo.task.entity.Task;
@@ -18,7 +19,9 @@ import jakarta.persistence.EntityManager;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -81,6 +84,22 @@ public class TaskServiceImpl implements TaskService {
     @Transactional(readOnly = true)
     public Page<TaskResponse> findAll(Pageable pageable) {
         return taskRepository.findAll(pageable).map(taskMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TaskFeedResponse findFeed(Long afterId, int limit) {
+        Pageable pageable = PageRequest.of(0, limit);
+        Slice<Task> slice = afterId == null
+                ? taskRepository.findAllByOrderByIdAsc(pageable)
+                : taskRepository.findByIdGreaterThanOrderByIdAsc(afterId, pageable);
+        var tasks = slice.getContent().stream()
+                .map(taskMapper::toResponse)
+                .toList();
+        Long nextCursor = slice.hasNext() && !tasks.isEmpty()
+                ? tasks.get(tasks.size() - 1).id()
+                : null;
+        return new TaskFeedResponse(tasks, nextCursor);
     }
 
     @Override

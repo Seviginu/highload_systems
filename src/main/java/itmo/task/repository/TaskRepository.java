@@ -3,6 +3,7 @@ package itmo.task.repository;
 import itmo.task.entity.Task;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -21,4 +22,10 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     @Override
     @EntityGraph(attributePaths = {"author", "assignee", "project"})
     Page<Task> findAll(Pageable pageable);
+
+    @EntityGraph(attributePaths = {"author", "assignee", "project"})
+    Slice<Task> findAllByOrderByIdAsc(Pageable pageable);
+
+    @EntityGraph(attributePaths = {"author", "assignee", "project"})
+    Slice<Task> findByIdGreaterThanOrderByIdAsc(Long afterId, Pageable pageable);
 }

@@ -4,6 +4,7 @@ import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
 import itmo.common.web.GlobalExceptionHandler;
 import itmo.task.dto.CreateTaskRequest;
+import itmo.task.dto.TaskFeedResponse;
 import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
 import itmo.task.entity.TaskPriority;
@@ -97,6 +98,17 @@ class TaskControllerTest {
         mockMvc.perform(get("/api/tasks"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Total-Count", "1"))
+                .andExpect(jsonPath("$[0].id").value(1));
+    }
+
+    @Test
+    void shouldReturnCursorFeedAndNextCursor() throws Exception {
+        when(taskService.findFeed(null, 20))
+                .thenReturn(new TaskFeedResponse(List.of(response), 1L));
+
+        mockMvc.perform(get("/api/tasks/feed"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Next-Cursor", "1"))
                 .andExpect(jsonPath("$[0].id").value(1));
     }
 

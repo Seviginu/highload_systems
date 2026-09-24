@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import itmo.common.web.ApiError;
 import itmo.task.dto.CreateTaskRequest;
+import itmo.task.dto.TaskFeedResponse;
 import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
 import itmo.task.service.TaskService;
@@ -136,6 +137,37 @@ public class TaskController {
         return ResponseEntity.ok()
                 .header("X-Total-Count", String.valueOf(result.getTotalElements()))
                 .body(result.getContent());
+    }
+
+    @GetMapping("/feed")
+    @Operation(summary = "Get a cursor-based task feed")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Task feed returned",
+                    headers = @Header(
+                            name = "X-Next-Cursor",
+                            description = "Last returned task id when another page is available",
+                            schema = @Schema(type = "integer", format = "int64")
+                    ),
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = TaskResponse.class)))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid cursor or limit",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))
+            )
+    })
+    public ResponseEntity<List<TaskResponse>> findFeed(
+            @RequestParam(required = false) @Min(0) Long afterId,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit
+    ) {
+        TaskFeedResponse result = taskService.findFeed(afterId, limit);
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok();
+        if (result.nextCursor() != null) {
+            response.header("X-Next-Cursor", String.valueOf(result.nextCursor()));
+        }
+        return response.body(result.tasks());
     }
 
     @PutMapping("/{id}")
