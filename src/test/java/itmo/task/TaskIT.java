@@ -355,11 +355,19 @@ class TaskIT {
         var openApi = restTemplate.getForEntity("/v3/api-docs", String.class);
         assertThat(openApi.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(openApi.getBody())
+                .contains("/api/users")
+                .contains("/api/projects")
+                .contains("/api/projects/{projectId}/members")
+                .contains("/api/labels")
                 .contains("/api/tasks")
                 .contains("/api/tasks/feed")
                 .contains("/api/tasks/{id}/move")
                 .contains("X-Total-Count")
                 .contains("X-Next-Cursor")
+                .contains("UserResponse")
+                .contains("ProjectResponse")
+                .contains("ProjectMemberResponse")
+                .contains("LabelResponse")
                 .contains("TaskResponse")
                 .contains("ApiError");
     }

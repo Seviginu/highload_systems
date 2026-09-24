@@ -49,10 +49,24 @@ public class ProjectMemberController {
     @PostMapping
     @Operation(summary = "Add a member to a project")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Member added"),
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "Member added",
+                    headers = @Header(
+                            name = "Location",
+                            description = "URI of the created project membership",
+                            schema = @Schema(type = "string", format = "uri")
+                    ),
+                    content = @Content(schema = @Schema(implementation = ProjectMemberResponse.class))
+            ),
             @ApiResponse(
                     responseCode = "400",
                     description = "Request validation failed",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid page or size",
                     content = @Content(schema = @Schema(implementation = ApiError.class))
             ),
             @ApiResponse(
@@ -101,7 +115,9 @@ public class ProjectMemberController {
     public ResponseEntity<List<ProjectMemberResponse>> findAll(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long projectId,
+            @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0") @Min(0) int page,
+            @Parameter(description = "Page size from 1 to 50", example = "20")
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
     ) {
         Page<ProjectMemberResponse> result = memberService.findAll(
@@ -124,7 +140,9 @@ public class ProjectMemberController {
             )
     })
     public ResponseEntity<Void> deactivate(
+            @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long projectId,
+            @Parameter(description = "Project membership identifier", example = "1")
             @PathVariable Long memberId
     ) {
         memberService.deactivate(projectId, memberId);

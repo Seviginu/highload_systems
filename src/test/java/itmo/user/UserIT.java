@@ -160,6 +160,9 @@ class UserIT {
 
     @Test
     void shouldExposeUserApiInOpenApiDocument() {
+        var invalidPage = restTemplate.getForEntity("/api/users?size=51", String.class);
+        assertThat(invalidPage.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
         var response = restTemplate.getForEntity("/v3/api-docs", String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);

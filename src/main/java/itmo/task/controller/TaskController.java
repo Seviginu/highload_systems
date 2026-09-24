@@ -129,7 +129,9 @@ public class TaskController {
             )
     })
     public ResponseEntity<List<TaskResponse>> findAll(
+            @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0") @Min(0) int page,
+            @Parameter(description = "Page size from 1 to 50", example = "20")
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
     ) {
         Page<TaskResponse> result = taskService.findAll(
@@ -160,7 +162,9 @@ public class TaskController {
             )
     })
     public ResponseEntity<List<TaskResponse>> findFeed(
+            @Parameter(description = "Return tasks with an id greater than this cursor", example = "100")
             @RequestParam(required = false) @Min(0) Long afterId,
+            @Parameter(description = "Feed size from 1 to 50", example = "20")
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit
     ) {
         TaskFeedResponse result = taskService.findFeed(afterId, limit);
@@ -196,6 +200,7 @@ public class TaskController {
             )
     })
     public TaskResponse update(
+            @Parameter(description = "Task identifier", example = "1")
             @PathVariable Long id,
             @Valid @RequestBody UpdateTaskRequest request
     ) {
@@ -227,6 +232,7 @@ public class TaskController {
             )
     })
     public TaskResponse move(
+            @Parameter(description = "Task identifier", example = "1")
             @PathVariable Long id,
             @Valid @RequestBody MoveTaskRequest request
     ) {
@@ -243,7 +249,10 @@ public class TaskController {
                     content = @Content(schema = @Schema(implementation = ApiError.class))
             )
     })
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(
+            @Parameter(description = "Task identifier", example = "1")
+            @PathVariable Long id
+    ) {
         taskService.delete(id);
         return ResponseEntity.noContent().build();
     }

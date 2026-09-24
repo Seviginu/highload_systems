@@ -1,0 +1,73 @@
+package itmo.common.web;
+
+import itmo.label.controller.LabelController;
+import itmo.project.controller.ProjectController;
+import itmo.project.controller.ProjectMemberController;
+import itmo.task.controller.TaskController;
+import itmo.user.controller.UserController;
+import jakarta.validation.constraints.Max;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.ResponseEntity;
+
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class ControllerContractTest {
+
+    private static final List<Class<?>> CONTROLLERS = List.of(
+            UserController.class,
+            ProjectController.class,
+            ProjectMemberController.class,
+            LabelController.class,
+            TaskController.class
+    );
+
+    @Test
+    void shouldNeverExposeJpaEntities() {
+        CONTROLLERS.stream()
+                .flatMap(controller -> List.of(controller.getDeclaredMethods()).stream())
+                .forEach(method -> assertThat(containsEntity(method.getGenericReturnType()))
+                        .as("%s.%s return type", method.getDeclaringClass().getSimpleName(), method.getName())
+                        .isFalse());
+    }
+
+    @Test
+    void shouldLimitEveryListEndpointToFiftyItems() {
+        CONTROLLERS.stream()
+                .flatMap(controller -> List.of(controller.getDeclaredMethods()).stream())
+                .filter(method -> isListResponse(method.getGenericReturnType()))
+                .forEach(method -> assertThat(List.of(method.getParameters()))
+                        .as("%s.%s limit", method.getDeclaringClass().getSimpleName(), method.getName())
+                        .anySatisfy(parameter -> {
+                            Max max = parameter.getAnnotation(Max.class);
+                            assertThat(max).isNotNull();
+                            assertThat(max.value()).isEqualTo(50);
+                        }));
+    }
+
+    private boolean isListResponse(Type type) {
+        if (!(type instanceof ParameterizedType parameterizedType)) {
+            return false;
+        }
+        if (parameterizedType.getRawType() != ResponseEntity.class) {
+            return false;
+        }
+        return List.of(parameterizedType.getActualTypeArguments()).stream()
+                .anyMatch(argument -> argument instanceof ParameterizedType nested
+                        && nested.getRawType() == List.class);
+    }
+
+    private boolean containsEntity(Type type) {
+        if (type instanceof Class<?> typeClass) {
+            return typeClass.getPackageName().contains(".entity");
+        }
+        if (type instanceof ParameterizedType parameterizedType) {
+            return containsEntity(parameterizedType.getRawType())
+                    || List.of(parameterizedType.getActualTypeArguments()).stream().anyMatch(this::containsEntity);
+        }
+        return false;
+    }
+}

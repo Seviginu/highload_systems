@@ -167,6 +167,15 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.message").value("Request body is malformed"));
     }
 
+    @Test
+    void shouldReturnStructuredErrorForInvalidPathVariableType() throws Exception {
+        mockMvc.perform(get("/api/users/not-a-number"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Parameter 'id' has an invalid value"))
+                .andExpect(jsonPath("$.path").value("/api/users/not-a-number"));
+    }
+
     private String validRequest() {
         return """
                 {
