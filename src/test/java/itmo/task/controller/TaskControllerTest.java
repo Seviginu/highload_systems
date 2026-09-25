@@ -6,6 +6,7 @@ import itmo.common.web.GlobalExceptionHandler;
 import itmo.task.dto.CreateTaskRequest;
 import itmo.task.dto.MoveTaskRequest;
 import itmo.task.dto.TaskFeedResponse;
+import itmo.task.dto.TaskFilter;
 import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
 import itmo.task.entity.TaskPriority;
@@ -94,12 +95,21 @@ class TaskControllerTest {
     @Test
     void shouldReturnPageAndTotalCount() throws Exception {
         PageRequest pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "id"));
-        when(taskService.findAll(pageable)).thenReturn(new PageImpl<>(List.of(response), pageable, 1));
+        TaskFilter filter = new TaskFilter(4L, 2L, 3L, 5L, TaskStatus.TODO, TaskPriority.HIGH);
+        when(taskService.findAll(filter, pageable)).thenReturn(new PageImpl<>(List.of(response), pageable, 1));
 
-        mockMvc.perform(get("/api/tasks"))
+        mockMvc.perform(get("/api/tasks")
+                        .param("projectId", "4")
+                        .param("authorId", "2")
+                        .param("assigneeId", "3")
+                        .param("labelId", "5")
+                        .param("status", "TODO")
+                        .param("priority", "HIGH"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Total-Count", "1"))
                 .andExpect(jsonPath("$[0].id").value(1));
+
+        verify(taskService).findAll(filter, pageable);
     }
 
     @Test

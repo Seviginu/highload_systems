@@ -271,6 +271,81 @@ class TaskIT {
     }
 
     @Test
+    void shouldFilterTasksByRelationsStatusAndPriority() {
+        TestData data = createTestData();
+        TaskResponse matching = restTemplate.postForEntity(
+                "/api/tasks",
+                createRequest(data, "PLATFORM-1"),
+                TaskResponse.class
+        ).getBody();
+        TaskResponse differentState = restTemplate.postForEntity(
+                "/api/tasks",
+                new CreateTaskRequest(
+                        "PLATFORM-2",
+                        "Completed task",
+                        null,
+                        TaskStatus.DONE,
+                        TaskPriority.LOW,
+                        data.author().getId(),
+                        data.assignee().getId(),
+                        data.project().getId(),
+                        Set.of(data.label().getId())
+                ),
+                TaskResponse.class
+        ).getBody();
+        assertThat(matching).isNotNull();
+        assertThat(differentState).isNotNull();
+
+        User anotherAuthor = userRepository.saveAndFlush(
+                new User("Another author", "another-author@example.com", UserRole.TEAM_LEAD)
+        );
+        User anotherAssignee = userRepository.saveAndFlush(
+                new User("Another developer", "another-developer@example.com", UserRole.DEVELOPER)
+        );
+        Project anotherProject = projectRepository.saveAndFlush(
+                new Project("Mobile", "MOBILE", null, ProjectStatus.ACTIVE)
+        );
+        Label anotherLabel = labelRepository.saveAndFlush(new Label("Mobile", "#445566"));
+        restTemplate.postForEntity(
+                "/api/tasks",
+                new CreateTaskRequest(
+                        "MOBILE-1",
+                        "Another task",
+                        null,
+                        TaskStatus.TODO,
+                        TaskPriority.HIGH,
+                        anotherAuthor.getId(),
+                        anotherAssignee.getId(),
+                        anotherProject.getId(),
+                        Set.of(anotherLabel.getId())
+                ),
+                TaskResponse.class
+        );
+
+        String combinedFilter = "/api/tasks?projectId=%d&authorId=%d&assigneeId=%d&labelId=%d"
+                .formatted(
+                        data.project().getId(),
+                        data.author().getId(),
+                        data.assignee().getId(),
+                        data.label().getId()
+                ) + "&status=TODO&priority=HIGH&page=0&size=20";
+        var filtered = restTemplate.getForEntity(combinedFilter, TaskResponse[].class);
+
+        assertThat(filtered.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(filtered.getHeaders().getFirst("X-Total-Count")).isEqualTo("1");
+        assertThat(filtered.getBody()).extracting(TaskResponse::id).containsExactly(matching.id());
+
+        var byLabel = restTemplate.getForEntity(
+                "/api/tasks?labelId={labelId}",
+                TaskResponse[].class,
+                data.label().getId()
+        );
+        assertThat(byLabel.getHeaders().getFirst("X-Total-Count")).isEqualTo("2");
+        assertThat(byLabel.getBody()).extracting(TaskResponse::id)
+                .containsExactly(matching.id(), differentState.id());
+    }
+
+    @Test
     void shouldRejectDuplicateTaskKey() {
         TestData data = createTestData();
         assertThat(restTemplate.postForEntity(
@@ -479,6 +554,8 @@ class TaskIT {
     void shouldRejectPageSizeAboveFiftyAndExposeOpenApi() {
         var invalidPage = restTemplate.getForEntity("/api/tasks?size=51", String.class);
         assertThat(invalidPage.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        var invalidFilter = restTemplate.getForEntity("/api/tasks?labelId=0", String.class);
+        assertThat(invalidFilter.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         var invalidFeed = restTemplate.getForEntity(
                 "/api/tasks/feed?afterId=-1&limit=51",
                 String.class

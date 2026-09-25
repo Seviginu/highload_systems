@@ -10,6 +10,7 @@ import itmo.project.service.ProjectMemberService;
 import itmo.project.service.ProjectService;
 import itmo.task.dto.CreateTaskRequest;
 import itmo.task.dto.MoveTaskRequest;
+import itmo.task.dto.TaskFilter;
 import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
 import itmo.task.entity.Task;
@@ -151,11 +152,14 @@ class TaskServiceImplTest {
     void shouldFindAndListTasks() {
         Task task = task();
         PageRequest pageable = PageRequest.of(0, 20);
+        TaskFilter filter = new TaskFilter(1L, 2L, 3L, 4L, TaskStatus.TODO, TaskPriority.HIGH);
         when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
-        when(taskRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(task), pageable, 1));
+        when(taskRepository.findAllFiltered(
+                1L, 2L, 3L, 4L, TaskStatus.TODO, TaskPriority.HIGH, pageable
+        )).thenReturn(new PageImpl<>(List.of(task), pageable, 1));
 
         assertThat(taskService.findById(10L).taskKey()).isEqualTo("PLATFORM-1");
-        assertThat(taskService.findAll(pageable).getTotalElements()).isEqualTo(1);
+        assertThat(taskService.findAll(filter, pageable).getTotalElements()).isEqualTo(1);
     }
 
     @Test

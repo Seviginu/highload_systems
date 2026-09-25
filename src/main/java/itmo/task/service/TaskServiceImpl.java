@@ -10,6 +10,7 @@ import itmo.project.service.ProjectService;
 import itmo.task.dto.CreateTaskRequest;
 import itmo.task.dto.MoveTaskRequest;
 import itmo.task.dto.TaskFeedResponse;
+import itmo.task.dto.TaskFilter;
 import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
 import itmo.task.entity.Task;
@@ -93,8 +94,16 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<TaskResponse> findAll(Pageable pageable) {
-        return taskRepository.findAll(pageable).map(taskMapper::toResponse);
+    public Page<TaskResponse> findAll(TaskFilter filter, Pageable pageable) {
+        return taskRepository.findAllFiltered(
+                filter.projectId(),
+                filter.authorId(),
+                filter.assigneeId(),
+                filter.labelId(),
+                filter.status(),
+                filter.priority(),
+                pageable
+        ).map(taskMapper::toResponse);
     }
 
     @Override

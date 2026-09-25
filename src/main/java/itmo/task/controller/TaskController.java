@@ -12,12 +12,16 @@ import itmo.common.web.ApiError;
 import itmo.task.dto.CreateTaskRequest;
 import itmo.task.dto.MoveTaskRequest;
 import itmo.task.dto.TaskFeedResponse;
+import itmo.task.dto.TaskFilter;
 import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
+import itmo.task.entity.TaskPriority;
+import itmo.task.entity.TaskStatus;
 import itmo.task.service.TaskService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Positive;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -118,16 +122,29 @@ public class TaskController {
     )
     @ApiResponse(
             responseCode = "400",
-            description = "Invalid page or size",
+            description = "Invalid filter, page or size",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
     public ResponseEntity<List<TaskResponse>> findAll(
+            @Parameter(description = "Filter by project identifier", example = "1")
+            @RequestParam(required = false) @Positive Long projectId,
+            @Parameter(description = "Filter by author identifier", example = "2")
+            @RequestParam(required = false) @Positive Long authorId,
+            @Parameter(description = "Filter by assignee identifier", example = "3")
+            @RequestParam(required = false) @Positive Long assigneeId,
+            @Parameter(description = "Filter by label identifier", example = "4")
+            @RequestParam(required = false) @Positive Long labelId,
+            @Parameter(description = "Filter by task status", example = "TODO")
+            @RequestParam(required = false) TaskStatus status,
+            @Parameter(description = "Filter by task priority", example = "HIGH")
+            @RequestParam(required = false) TaskPriority priority,
             @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @Parameter(description = "Page size from 1 to 50", example = "20")
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
     ) {
         Page<TaskResponse> result = taskService.findAll(
+                new TaskFilter(projectId, authorId, assigneeId, labelId, status, priority),
                 PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"))
         );
         return ResponseEntity.ok()
