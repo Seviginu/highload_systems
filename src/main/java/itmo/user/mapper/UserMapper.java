@@ -6,8 +6,6 @@ import itmo.user.dto.UserResponse;
 import itmo.user.entity.User;
 import org.springframework.stereotype.Component;
 
-import java.util.Locale;
-
 @Component
 public class UserMapper {
 
@@ -31,7 +29,7 @@ public class UserMapper {
     }
 
     public String normalizeEmail(String email) {
-        return email.trim().toLowerCase(Locale.ROOT);
+        return email.trim().toLowerCase();
     }
 
     private String normalizeName(String name) {

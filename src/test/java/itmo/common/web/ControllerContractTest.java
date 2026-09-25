@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -28,7 +29,7 @@ class ControllerContractTest {
     @Test
     void shouldNeverExposeJpaEntities() {
         CONTROLLERS.stream()
-                .flatMap(controller -> List.of(controller.getDeclaredMethods()).stream())
+                .flatMap(controller -> Stream.of(controller.getDeclaredMethods()))
                 .forEach(method -> assertThat(containsEntity(method.getGenericReturnType()))
                         .as("%s.%s return type", method.getDeclaringClass().getSimpleName(), method.getName())
                         .isFalse());
@@ -37,7 +38,7 @@ class ControllerContractTest {
     @Test
     void shouldLimitEveryListEndpointToFiftyItems() {
         CONTROLLERS.stream()
-                .flatMap(controller -> List.of(controller.getDeclaredMethods()).stream())
+                .flatMap(controller -> Stream.of(controller.getDeclaredMethods()))
                 .filter(method -> isListResponse(method.getGenericReturnType()))
                 .forEach(method -> assertThat(List.of(method.getParameters()))
                         .as("%s.%s limit", method.getDeclaringClass().getSimpleName(), method.getName())
@@ -55,7 +56,7 @@ class ControllerContractTest {
         if (parameterizedType.getRawType() != ResponseEntity.class) {
             return false;
         }
-        return List.of(parameterizedType.getActualTypeArguments()).stream()
+        return Stream.of(parameterizedType.getActualTypeArguments())
                 .anyMatch(argument -> argument instanceof ParameterizedType nested
                         && nested.getRawType() == List.class);
     }
@@ -66,7 +67,7 @@ class ControllerContractTest {
         }
         if (type instanceof ParameterizedType parameterizedType) {
             return containsEntity(parameterizedType.getRawType())
-                    || List.of(parameterizedType.getActualTypeArguments()).stream().anyMatch(this::containsEntity);
+                    || Stream.of(parameterizedType.getActualTypeArguments()).anyMatch(this::containsEntity);
         }
         return false;
     }

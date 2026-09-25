@@ -53,13 +53,16 @@ public class Project {
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
+    @SuppressWarnings("unused")
     private Instant createdAt;
 
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
+    @SuppressWarnings("unused")
     private Instant updatedAt;
 
     @OneToMany(mappedBy = "project")
+    @SuppressWarnings("FieldMayBeFinal")
     private Set<Task> tasks = new LinkedHashSet<>();
 
     protected Project() {

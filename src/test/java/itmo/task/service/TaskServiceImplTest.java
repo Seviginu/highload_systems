@@ -12,6 +12,7 @@ import itmo.project.service.ProjectMemberService;
 import itmo.project.service.ProjectService;
 import itmo.task.dto.CreateTaskRequest;
 import itmo.task.dto.MoveTaskRequest;
+import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
 import itmo.task.entity.Task;
 import itmo.task.entity.TaskPriority;
@@ -124,8 +125,9 @@ class TaskServiceImplTest {
     @Test
     void shouldRejectDuplicateTaskKey() {
         when(taskRepository.existsByTaskKey("PLATFORM-1")).thenReturn(true);
+        CreateTaskRequest request = createRequest();
 
-        assertThatThrownBy(() -> taskService.create(createRequest()))
+        assertThatThrownBy(() -> taskService.create(request))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("PLATFORM-1");
         verify(taskRepository, never()).saveAndFlush(any(Task.class));
@@ -137,8 +139,9 @@ class TaskServiceImplTest {
         when(taskRepository.existsByTaskKey("PLATFORM-1")).thenReturn(false);
         when(taskRepository.saveAndFlush(any(Task.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate"));
+        CreateTaskRequest request = createRequest();
 
-        assertThatThrownBy(() -> taskService.create(createRequest()))
+        assertThatThrownBy(() -> taskService.create(request))
                 .isInstanceOf(ConflictException.class);
     }
 
@@ -146,8 +149,9 @@ class TaskServiceImplTest {
     void shouldPropagateMissingRelatedResource() {
         when(taskRepository.existsByTaskKey("PLATFORM-1")).thenReturn(false);
         when(projectService.findById(1L)).thenThrow(new ResourceNotFoundException("Project", 1L));
+        CreateTaskRequest request = createRequest();
 
-        assertThatThrownBy(() -> taskService.create(createRequest()))
+        assertThatThrownBy(() -> taskService.create(request))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(taskRepository, never()).saveAndFlush(any(Task.class));
     }
@@ -175,7 +179,7 @@ class TaskServiceImplTest {
         var firstPage = taskService.findFeed(null, 2);
         var lastPage = taskService.findFeed(10L, 2);
 
-        assertThat(firstPage.tasks()).extracting(response -> response.id()).containsExactly(10L);
+        assertThat(firstPage.tasks()).extracting(TaskResponse::id).containsExactly(10L);
         assertThat(firstPage.nextCursor()).isEqualTo(10L);
         assertThat(lastPage.tasks()).hasSize(1);
         assertThat(lastPage.nextCursor()).isNull();
@@ -217,11 +221,10 @@ class TaskServiceImplTest {
         when(userService.findById(5L)).thenReturn(userResponse());
         when(entityManager.getReference(Project.class, 4L)).thenReturn(targetProject);
         when(entityManager.getReference(User.class, 5L)).thenReturn(assignee);
+        MoveTaskRequest request = new MoveTaskRequest(4L, 5L, Set.of(3L), 0L);
 
-        assertThatThrownBy(() -> taskService.move(
-                10L,
-                new MoveTaskRequest(4L, 5L, Set.of(3L), 0L)
-        )).isInstanceOf(ConflictException.class)
+        assertThatThrownBy(() -> taskService.move(10L, request))
+                .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("not an active member");
         assertThat(task.getProject().getId()).isEqualTo(1L);
         verify(taskRepository, never()).saveAndFlush(task);
@@ -254,8 +257,9 @@ class TaskServiceImplTest {
     void shouldRejectStaleVersionBeforeChangingRelations() {
         Task task = task();
         when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
+        UpdateTaskRequest request = updateRequest(7L);
 
-        assertThatThrownBy(() -> taskService.update(10L, updateRequest(7L)))
+        assertThatThrownBy(() -> taskService.update(10L, request))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("modified by another request");
         verify(projectService, never()).findById(any());
@@ -266,8 +270,9 @@ class TaskServiceImplTest {
         Task task = task();
         when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
         when(taskRepository.existsByTaskKeyAndIdNot("PLATFORM-2", 10L)).thenReturn(true);
+        UpdateTaskRequest request = updateRequest(0L);
 
-        assertThatThrownBy(() -> taskService.update(10L, updateRequest(0L)))
+        assertThatThrownBy(() -> taskService.update(10L, request))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("PLATFORM-2");
     }
@@ -280,8 +285,9 @@ class TaskServiceImplTest {
         when(taskRepository.existsByTaskKeyAndIdNot("PLATFORM-2", 10L)).thenReturn(false);
         when(taskRepository.saveAndFlush(task))
                 .thenThrow(new OptimisticLockingFailureException("stale"));
+        UpdateTaskRequest request = updateRequest(0L);
 
-        assertThatThrownBy(() -> taskService.update(10L, updateRequest(0L)))
+        assertThatThrownBy(() -> taskService.update(10L, request))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("modified by another request");
     }

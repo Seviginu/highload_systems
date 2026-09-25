@@ -10,7 +10,6 @@ import itmo.user.entity.User;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 @Component
@@ -80,7 +79,7 @@ public class TaskMapper {
     }
 
     public String normalizeTaskKey(String taskKey) {
-        return taskKey.trim().toUpperCase(Locale.ROOT);
+        return taskKey.trim().toUpperCase();
     }
 
     private String normalizeTitle(String title) {

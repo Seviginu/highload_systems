@@ -7,7 +7,6 @@ import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import itmo.common.web.ApiError;
 import itmo.label.dto.CreateLabelRequest;
@@ -50,28 +49,26 @@ public class LabelController {
 
     @PostMapping
     @Operation(summary = "Create a label")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "201",
-                    description = "Label created",
-                    headers = @Header(
-                            name = "Location",
-                            description = "URI of the created label",
-                            schema = @Schema(type = "string", format = "uri")
-                    ),
-                    content = @Content(schema = @Schema(implementation = LabelResponse.class))
+    @ApiResponse(
+            responseCode = "201",
+            description = "Label created",
+            headers = @Header(
+                    name = "Location",
+                    description = "URI of the created label",
+                    schema = @Schema(type = "string", format = "uri")
             ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "Request validation failed",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            ),
-            @ApiResponse(
-                    responseCode = "409",
-                    description = "Label name is already used",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            )
-    })
+            content = @Content(schema = @Schema(implementation = LabelResponse.class))
+    )
+    @ApiResponse(
+            responseCode = "400",
+            description = "Request validation failed",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
+    @ApiResponse(
+            responseCode = "409",
+            description = "Label name is already used",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
     public ResponseEntity<LabelResponse> create(@Valid @RequestBody CreateLabelRequest request) {
         LabelResponse response = labelService.create(request);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
@@ -83,18 +80,16 @@ public class LabelController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a label by id")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "Label found",
-                    content = @Content(schema = @Schema(implementation = LabelResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "Label not found",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            )
-    })
+    @ApiResponse(
+            responseCode = "200",
+            description = "Label found",
+            content = @Content(schema = @Schema(implementation = LabelResponse.class))
+    )
+    @ApiResponse(
+            responseCode = "404",
+            description = "Label not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
     public LabelResponse findById(
             @Parameter(description = "Label identifier", example = "1")
             @PathVariable Long id
@@ -104,23 +99,21 @@ public class LabelController {
 
     @GetMapping
     @Operation(summary = "Get a page of labels")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "Page returned",
-                    headers = @Header(
-                            name = "X-Total-Count",
-                            description = "Total number of labels",
-                            schema = @Schema(type = "integer", format = "int64")
-                    ),
-                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = LabelResponse.class)))
+    @ApiResponse(
+            responseCode = "200",
+            description = "Page returned",
+            headers = @Header(
+                    name = "X-Total-Count",
+                    description = "Total number of labels",
+                    schema = @Schema(type = "integer", format = "int64")
             ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "Invalid page or size",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            )
-    })
+            content = @Content(array = @ArraySchema(schema = @Schema(implementation = LabelResponse.class)))
+    )
+    @ApiResponse(
+            responseCode = "400",
+            description = "Invalid page or size",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
     public ResponseEntity<List<LabelResponse>> findAll(
             @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0") @Min(0) int page,
@@ -137,28 +130,26 @@ public class LabelController {
 
     @PutMapping("/{id}")
     @Operation(summary = "Replace a label")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "Label updated",
-                    content = @Content(schema = @Schema(implementation = LabelResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "Request validation failed",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "Label not found",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            ),
-            @ApiResponse(
-                    responseCode = "409",
-                    description = "Label name is already used",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            )
-    })
+    @ApiResponse(
+            responseCode = "200",
+            description = "Label updated",
+            content = @Content(schema = @Schema(implementation = LabelResponse.class))
+    )
+    @ApiResponse(
+            responseCode = "400",
+            description = "Request validation failed",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
+    @ApiResponse(
+            responseCode = "404",
+            description = "Label not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
+    @ApiResponse(
+            responseCode = "409",
+            description = "Label name is already used",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
     public LabelResponse update(
             @Parameter(description = "Label identifier", example = "1")
             @PathVariable Long id,
@@ -169,19 +160,17 @@ public class LabelController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete a label")
-    @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Label deleted"),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "Label not found",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            ),
-            @ApiResponse(
-                    responseCode = "409",
-                    description = "Label is referenced by tasks",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            )
-    })
+    @ApiResponse(responseCode = "204", description = "Label deleted")
+    @ApiResponse(
+            responseCode = "404",
+            description = "Label not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
+    @ApiResponse(
+            responseCode = "409",
+            description = "Label is referenced by tasks",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
     public ResponseEntity<Void> delete(
             @Parameter(description = "Label identifier", example = "1")
             @PathVariable Long id

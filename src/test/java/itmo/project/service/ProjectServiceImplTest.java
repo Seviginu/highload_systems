@@ -3,6 +3,7 @@ package itmo.project.service;
 import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
 import itmo.project.dto.CreateProjectRequest;
+import itmo.project.dto.ProjectResponse;
 import itmo.project.dto.UpdateProjectRequest;
 import itmo.project.entity.Project;
 import itmo.project.entity.ProjectStatus;
@@ -46,7 +47,7 @@ class ProjectServiceImplTest {
 
     @Test
     void shouldCreateProjectWithNormalizedValues() {
-        CreateProjectRequest request = request(" Platform ", " platform ", ProjectStatus.PLANNED);
+        CreateProjectRequest request = request(" Platform ", " platform ");
         when(projectRepository.existsByCode("PLATFORM")).thenReturn(false);
         when(projectRepository.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -60,7 +61,7 @@ class ProjectServiceImplTest {
 
     @Test
     void shouldRejectDuplicateCode() {
-        CreateProjectRequest request = request("Platform", "platform", ProjectStatus.PLANNED);
+        CreateProjectRequest request = request("Platform", "platform");
         when(projectRepository.existsByCode("PLATFORM")).thenReturn(true);
 
         assertThatThrownBy(() -> projectService.create(request))
@@ -71,7 +72,7 @@ class ProjectServiceImplTest {
 
     @Test
     void shouldTranslateDatabaseConflictDuringCreate() {
-        CreateProjectRequest request = request("Platform", "PLATFORM", ProjectStatus.PLANNED);
+        CreateProjectRequest request = request("Platform", "PLATFORM");
         when(projectRepository.existsByCode("PLATFORM")).thenReturn(false);
         when(projectRepository.saveAndFlush(any(Project.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate"));
@@ -92,20 +93,20 @@ class ProjectServiceImplTest {
 
     @Test
     void shouldReturnPageOfProjects() {
-        Project project = project("Platform", "PLATFORM", ProjectStatus.ACTIVE);
+        Project project = project(ProjectStatus.ACTIVE);
         PageRequest pageable = PageRequest.of(0, 20);
         when(projectRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(project), pageable, 1));
 
         var result = projectService.findAll(pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
-        assertThat(result.getContent()).extracting(response -> response.code())
+        assertThat(result.getContent()).extracting(ProjectResponse::code)
                 .containsExactly("PLATFORM");
     }
 
     @Test
     void shouldUpdateProject() {
-        Project project = project("Platform", "PLATFORM", ProjectStatus.PLANNED);
+        Project project = project(ProjectStatus.PLANNED);
         UpdateProjectRequest request = new UpdateProjectRequest(
                 "Platform Core",
                 "platform_core",
@@ -125,7 +126,7 @@ class ProjectServiceImplTest {
 
     @Test
     void shouldRejectDuplicateCodeDuringUpdate() {
-        Project project = project("Platform", "PLATFORM", ProjectStatus.PLANNED);
+        Project project = project(ProjectStatus.PLANNED);
         UpdateProjectRequest request = new UpdateProjectRequest(
                 "Platform",
                 "BUSY",
@@ -143,7 +144,7 @@ class ProjectServiceImplTest {
 
     @Test
     void shouldTranslateDatabaseConflictDuringUpdate() {
-        Project project = project("Platform", "PLATFORM", ProjectStatus.PLANNED);
+        Project project = project(ProjectStatus.PLANNED);
         UpdateProjectRequest request = new UpdateProjectRequest(
                 "Platform",
                 "PLATFORM_2",
@@ -162,7 +163,7 @@ class ProjectServiceImplTest {
 
     @Test
     void shouldDeleteExistingProject() {
-        Project project = project("Platform", "PLATFORM", ProjectStatus.PLANNED);
+        Project project = project(ProjectStatus.PLANNED);
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
 
         projectService.delete(1L);
@@ -173,7 +174,7 @@ class ProjectServiceImplTest {
 
     @Test
     void shouldRejectDeletionOfReferencedProject() {
-        Project project = project("Platform", "PLATFORM", ProjectStatus.PLANNED);
+        Project project = project(ProjectStatus.PLANNED);
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
         doThrow(new DataIntegrityViolationException("foreign key"))
                 .when(projectRepository).flush();
@@ -183,11 +184,11 @@ class ProjectServiceImplTest {
                 .hasMessageContaining("referenced");
     }
 
-    private CreateProjectRequest request(String name, String code, ProjectStatus status) {
-        return new CreateProjectRequest(name, code, "Description", status, 1L);
+    private CreateProjectRequest request(String name, String code) {
+        return new CreateProjectRequest(name, code, "Description", ProjectStatus.PLANNED, 1L);
     }
 
-    private Project project(String name, String code, ProjectStatus status) {
-        return new Project(name, code, "Description", status);
+    private Project project(ProjectStatus status) {
+        return new Project("Platform", "PLATFORM", "Description", status);
     }
 }

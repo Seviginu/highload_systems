@@ -11,10 +11,5 @@ export SERVER_PORT="${SERVER_PORT:-58080}"
 
 cd "${PROJECT_DIR}"
 
-echo "Starting VS Lab 1:"
-echo "  application:   http://localhost:${SERVER_PORT}"
-echo "  PostgreSQL:    localhost:${POSTGRES_PORT}"
-echo "  Redis:         localhost:${REDIS_PORT}"
-
 docker compose up --build -d
 docker compose ps

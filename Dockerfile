@@ -10,8 +10,9 @@ RUN mvn -B -DskipTests package
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-COPY --from=build /workspace/target/vs-lab1-*.jar application.jar
+RUN addgroup -S app && adduser -S app -G app
+COPY --from=build --chown=app:app /workspace/target/vs-lab1-*.jar application.jar
 
 EXPOSE 8080
+USER app
 ENTRYPOINT ["java", "-jar", "/app/application.jar"]
-

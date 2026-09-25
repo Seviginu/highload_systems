@@ -6,8 +6,6 @@ import itmo.label.dto.UpdateLabelRequest;
 import itmo.label.entity.Label;
 import org.springframework.stereotype.Component;
 
-import java.util.Locale;
-
 @Component
 public class LabelMapper {
 
@@ -28,6 +26,6 @@ public class LabelMapper {
     }
 
     private String normalizeColor(String color) {
-        return color == null ? null : color.toUpperCase(Locale.ROOT);
+        return color == null ? null : color.toUpperCase();
     }
 }

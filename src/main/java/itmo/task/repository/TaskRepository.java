@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
+@SuppressWarnings("NullableProblems")
 public interface TaskRepository extends JpaRepository<Task, Long> {
 
     boolean existsByTaskKey(String taskKey);

@@ -7,7 +7,6 @@ import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import itmo.common.web.ApiError;
 import itmo.project.dto.CreateProjectRequest;
@@ -50,28 +49,26 @@ public class ProjectController {
 
     @PostMapping
     @Operation(summary = "Create a project")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "201",
-                    description = "Project created",
-                    headers = @Header(
-                            name = "Location",
-                            description = "URI of the created project",
-                            schema = @Schema(type = "string", format = "uri")
-                    ),
-                    content = @Content(schema = @Schema(implementation = ProjectResponse.class))
+    @ApiResponse(
+            responseCode = "201",
+            description = "Project created",
+            headers = @Header(
+                    name = "Location",
+                    description = "URI of the created project",
+                    schema = @Schema(type = "string", format = "uri")
             ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "Request validation failed",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            ),
-            @ApiResponse(
-                    responseCode = "409",
-                    description = "Project code is already used",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            )
-    })
+            content = @Content(schema = @Schema(implementation = ProjectResponse.class))
+    )
+    @ApiResponse(
+            responseCode = "400",
+            description = "Request validation failed",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
+    @ApiResponse(
+            responseCode = "409",
+            description = "Project code is already used",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
     public ResponseEntity<ProjectResponse> create(@Valid @RequestBody CreateProjectRequest request) {
         ProjectResponse response = projectService.create(request);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
@@ -83,18 +80,16 @@ public class ProjectController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a project by id")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "Project found",
-                    content = @Content(schema = @Schema(implementation = ProjectResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "Project not found",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            )
-    })
+    @ApiResponse(
+            responseCode = "200",
+            description = "Project found",
+            content = @Content(schema = @Schema(implementation = ProjectResponse.class))
+    )
+    @ApiResponse(
+            responseCode = "404",
+            description = "Project not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
     public ProjectResponse findById(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long id
@@ -104,23 +99,21 @@ public class ProjectController {
 
     @GetMapping
     @Operation(summary = "Get a page of projects")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "Page returned",
-                    headers = @Header(
-                            name = "X-Total-Count",
-                            description = "Total number of projects",
-                            schema = @Schema(type = "integer", format = "int64")
-                    ),
-                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = ProjectResponse.class)))
+    @ApiResponse(
+            responseCode = "200",
+            description = "Page returned",
+            headers = @Header(
+                    name = "X-Total-Count",
+                    description = "Total number of projects",
+                    schema = @Schema(type = "integer", format = "int64")
             ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "Invalid page or size",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            )
-    })
+            content = @Content(array = @ArraySchema(schema = @Schema(implementation = ProjectResponse.class)))
+    )
+    @ApiResponse(
+            responseCode = "400",
+            description = "Invalid page or size",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
     public ResponseEntity<List<ProjectResponse>> findAll(
             @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0") @Min(0) int page,
@@ -137,28 +130,26 @@ public class ProjectController {
 
     @PutMapping("/{id}")
     @Operation(summary = "Replace a project")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "Project updated",
-                    content = @Content(schema = @Schema(implementation = ProjectResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "Request validation failed",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "Project not found",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            ),
-            @ApiResponse(
-                    responseCode = "409",
-                    description = "Project code is already used",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            )
-    })
+    @ApiResponse(
+            responseCode = "200",
+            description = "Project updated",
+            content = @Content(schema = @Schema(implementation = ProjectResponse.class))
+    )
+    @ApiResponse(
+            responseCode = "400",
+            description = "Request validation failed",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
+    @ApiResponse(
+            responseCode = "404",
+            description = "Project not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
+    @ApiResponse(
+            responseCode = "409",
+            description = "Project code is already used",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
     public ProjectResponse update(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long id,
@@ -169,19 +160,17 @@ public class ProjectController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete a project")
-    @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Project deleted"),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "Project not found",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            ),
-            @ApiResponse(
-                    responseCode = "409",
-                    description = "Project is referenced by another record",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            )
-    })
+    @ApiResponse(responseCode = "204", description = "Project deleted")
+    @ApiResponse(
+            responseCode = "404",
+            description = "Project not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
+    @ApiResponse(
+            responseCode = "409",
+            description = "Project is referenced by another record",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
     public ResponseEntity<Void> delete(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long id

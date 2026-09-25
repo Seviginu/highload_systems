@@ -61,6 +61,7 @@ class TaskIT {
 
     @Container
     @ServiceConnection
+    @SuppressWarnings("resource")
     static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7.4-alpine"))
             .withExposedPorts(6379);
 

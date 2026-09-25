@@ -3,6 +3,7 @@ package itmo.label.service;
 import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
 import itmo.label.dto.CreateLabelRequest;
+import itmo.label.dto.LabelResponse;
 import itmo.label.dto.UpdateLabelRequest;
 import itmo.label.entity.Label;
 import itmo.label.mapper.LabelMapper;
@@ -54,8 +55,9 @@ class LabelServiceImplTest {
     @Test
     void shouldRejectDuplicateNameIgnoringCase() {
         when(labelRepository.existsByNameIgnoreCase("backend")).thenReturn(true);
+        CreateLabelRequest request = new CreateLabelRequest("backend", null);
 
-        assertThatThrownBy(() -> labelService.create(new CreateLabelRequest("backend", null)))
+        assertThatThrownBy(() -> labelService.create(request))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("backend");
         verify(labelRepository, never()).saveAndFlush(any(Label.class));
@@ -66,14 +68,15 @@ class LabelServiceImplTest {
         when(labelRepository.existsByNameIgnoreCase("Backend")).thenReturn(false);
         when(labelRepository.saveAndFlush(any(Label.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate"));
+        CreateLabelRequest request = new CreateLabelRequest("Backend", null);
 
-        assertThatThrownBy(() -> labelService.create(new CreateLabelRequest("Backend", null)))
+        assertThatThrownBy(() -> labelService.create(request))
                 .isInstanceOf(ConflictException.class);
     }
 
     @Test
     void shouldFindLabelById() {
-        when(labelRepository.findById(1L)).thenReturn(Optional.of(label("Backend", "#A1B2C3")));
+        when(labelRepository.findById(1L)).thenReturn(Optional.of(label("#A1B2C3")));
 
         assertThat(labelService.findById(1L).name()).isEqualTo("Backend");
     }
@@ -91,17 +94,17 @@ class LabelServiceImplTest {
     void shouldReturnPageOfLabels() {
         PageRequest pageable = PageRequest.of(0, 20);
         when(labelRepository.findAll(pageable))
-                .thenReturn(new PageImpl<>(List.of(label("Backend", null)), pageable, 1));
+                .thenReturn(new PageImpl<>(List.of(label(null)), pageable, 1));
 
         var result = labelService.findAll(pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
-        assertThat(result.getContent()).extracting(response -> response.name()).containsExactly("Backend");
+        assertThat(result.getContent()).extracting(LabelResponse::name).containsExactly("Backend");
     }
 
     @Test
     void shouldUpdateLabel() {
-        Label label = label("Backend", "#000000");
+        Label label = label("#000000");
         when(labelRepository.findById(1L)).thenReturn(Optional.of(label));
         when(labelRepository.existsByNameIgnoreCaseAndIdNot("API", 1L)).thenReturn(false);
         when(labelRepository.saveAndFlush(label)).thenReturn(label);
@@ -114,30 +117,32 @@ class LabelServiceImplTest {
 
     @Test
     void shouldRejectDuplicateNameDuringUpdate() {
-        Label label = label("Backend", null);
+        Label label = label(null);
         when(labelRepository.findById(1L)).thenReturn(Optional.of(label));
         when(labelRepository.existsByNameIgnoreCaseAndIdNot("Frontend", 1L)).thenReturn(true);
+        UpdateLabelRequest request = new UpdateLabelRequest("Frontend", null);
 
-        assertThatThrownBy(() -> labelService.update(1L, new UpdateLabelRequest("Frontend", null)))
+        assertThatThrownBy(() -> labelService.update(1L, request))
                 .isInstanceOf(ConflictException.class);
         verify(labelRepository, never()).saveAndFlush(label);
     }
 
     @Test
     void shouldTranslateDatabaseConflictDuringUpdate() {
-        Label label = label("Backend", null);
+        Label label = label(null);
         when(labelRepository.findById(1L)).thenReturn(Optional.of(label));
         when(labelRepository.existsByNameIgnoreCaseAndIdNot("API", 1L)).thenReturn(false);
         when(labelRepository.saveAndFlush(label))
                 .thenThrow(new DataIntegrityViolationException("duplicate"));
+        UpdateLabelRequest request = new UpdateLabelRequest("API", null);
 
-        assertThatThrownBy(() -> labelService.update(1L, new UpdateLabelRequest("API", null)))
+        assertThatThrownBy(() -> labelService.update(1L, request))
                 .isInstanceOf(ConflictException.class);
     }
 
     @Test
     void shouldDeleteLabel() {
-        Label label = label("Backend", null);
+        Label label = label(null);
         when(labelRepository.findById(1L)).thenReturn(Optional.of(label));
 
         labelService.delete(1L);
@@ -148,7 +153,7 @@ class LabelServiceImplTest {
 
     @Test
     void shouldRejectDeletionOfReferencedLabel() {
-        Label label = label("Backend", null);
+        Label label = label(null);
         when(labelRepository.findById(1L)).thenReturn(Optional.of(label));
         doThrow(new DataIntegrityViolationException("foreign key")).when(labelRepository).flush();
 
@@ -157,7 +162,7 @@ class LabelServiceImplTest {
                 .hasMessageContaining("referenced");
     }
 
-    private Label label(String name, String color) {
-        return new Label(name, color);
+    private Label label(String color) {
+        return new Label("Backend", color);
     }
 }

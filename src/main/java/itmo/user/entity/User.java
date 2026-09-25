@@ -43,10 +43,12 @@ public class User {
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
+    @SuppressWarnings("unused")
     private Instant createdAt;
 
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
+    @SuppressWarnings("unused")
     private Instant updatedAt;
 
     protected User() {

@@ -6,8 +6,6 @@ import itmo.project.dto.UpdateProjectRequest;
 import itmo.project.entity.Project;
 import org.springframework.stereotype.Component;
 
-import java.util.Locale;
-
 @Component
 public class ProjectMapper {
 
@@ -42,7 +40,7 @@ public class ProjectMapper {
     }
 
     public String normalizeCode(String code) {
-        return code.trim().toUpperCase(Locale.ROOT);
+        return code.trim().toUpperCase();
     }
 
     private String normalizeName(String name) {

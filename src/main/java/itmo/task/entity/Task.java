@@ -40,7 +40,7 @@ public class Task {
     @NotBlank(message = "Task key must not be blank")
     @Size(max = 32, message = "Task key must not exceed 32 characters")
     @Pattern(
-            regexp = "^[A-Z][A-Z0-9_]{1,19}-[1-9][0-9]*$",
+            regexp = "^[A-Z][A-Z0-9_]{1,19}-[1-9]\\d*$",
             message = "Task key must have format PROJECT-1"
     )
     @Column(name = "task_key", nullable = false, unique = true, length = 32)
@@ -48,7 +48,7 @@ public class Task {
 
     @NotBlank(message = "Title must not be blank")
     @Size(max = 255, message = "Title must not exceed 255 characters")
-    @Column(nullable = false, length = 255)
+    @Column(nullable = false)
     private String title;
 
     @Column(columnDefinition = "text")
@@ -85,23 +85,28 @@ public class Task {
             joinColumns = @JoinColumn(name = "task_id"),
             inverseJoinColumns = @JoinColumn(name = "label_id")
     )
+    @SuppressWarnings("FieldMayBeFinal")
     private Set<Label> labels = new LinkedHashSet<>();
 
     @Version
     @Column(nullable = false)
+    @SuppressWarnings("unused")
     private Long version;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
+    @SuppressWarnings("unused")
     private Instant createdAt;
 
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
+    @SuppressWarnings("unused")
     private Instant updatedAt;
 
     protected Task() {
     }
 
+    @SuppressWarnings("java:S107")
     public Task(
             String taskKey,
             String title,
@@ -125,6 +130,7 @@ public class Task {
         replaceLabels(labels);
     }
 
+    @SuppressWarnings("java:S107")
     public void update(
             String taskKey,
             String title,

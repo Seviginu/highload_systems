@@ -15,7 +15,7 @@ public record UpdateTaskRequest(
         @NotBlank(message = "Task key must not be blank")
         @Size(max = 32, message = "Task key must not exceed 32 characters")
         @Pattern(
-                regexp = "^[A-Za-z][A-Za-z0-9_]{1,19}-[1-9][0-9]*$",
+                regexp = "^[A-Za-z]\\w{1,19}-[1-9]\\d*$",
                 message = "Task key must have format PROJECT-1"
         )
         String taskKey,

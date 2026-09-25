@@ -42,6 +42,7 @@ public class ProjectMember {
 
     @CreationTimestamp
     @Column(name = "joined_at", nullable = false, updatable = false)
+    @SuppressWarnings("unused")
     private Instant joinedAt;
 
     @Column(nullable = false)

@@ -109,7 +109,7 @@ public class TaskServiceImpl implements TaskService {
                 .map(taskMapper::toResponse)
                 .toList();
         Long nextCursor = slice.hasNext() && !tasks.isEmpty()
-                ? tasks.get(tasks.size() - 1).id()
+                ? tasks.getLast().id()
                 : null;
         return new TaskFeedResponse(tasks, nextCursor);
     }

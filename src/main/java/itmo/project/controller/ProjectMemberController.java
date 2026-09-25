@@ -7,7 +7,6 @@ import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import itmo.common.web.ApiError;
 import itmo.project.dto.AddProjectMemberRequest;
@@ -48,38 +47,36 @@ public class ProjectMemberController {
 
     @PostMapping
     @Operation(summary = "Add a member to a project")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "201",
-                    description = "Member added",
-                    headers = @Header(
-                            name = "Location",
-                            description = "URI of the created project membership",
-                            schema = @Schema(type = "string", format = "uri")
-                    ),
-                    content = @Content(schema = @Schema(implementation = ProjectMemberResponse.class))
+    @ApiResponse(
+            responseCode = "201",
+            description = "Member added",
+            headers = @Header(
+                    name = "Location",
+                    description = "URI of the created project membership",
+                    schema = @Schema(type = "string", format = "uri")
             ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "Request validation failed",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "Invalid page or size",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "Project or user not found",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            ),
-            @ApiResponse(
-                    responseCode = "409",
-                    description = "User is already an active member",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            )
-    })
+            content = @Content(schema = @Schema(implementation = ProjectMemberResponse.class))
+    )
+    @ApiResponse(
+            responseCode = "400",
+            description = "Request validation failed",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
+    @ApiResponse(
+            responseCode = "400",
+            description = "Invalid page or size",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
+    @ApiResponse(
+            responseCode = "404",
+            description = "Project or user not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
+    @ApiResponse(
+            responseCode = "409",
+            description = "User is already an active member",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
     public ResponseEntity<ProjectMemberResponse> add(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long projectId,
@@ -95,23 +92,21 @@ public class ProjectMemberController {
 
     @GetMapping
     @Operation(summary = "Get a page of project members")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "Page returned",
-                    headers = @Header(
-                            name = "X-Total-Count",
-                            description = "Total number of project members",
-                            schema = @Schema(type = "integer", format = "int64")
-                    ),
-                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = ProjectMemberResponse.class)))
+    @ApiResponse(
+            responseCode = "200",
+            description = "Page returned",
+            headers = @Header(
+                    name = "X-Total-Count",
+                    description = "Total number of project members",
+                    schema = @Schema(type = "integer", format = "int64")
             ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "Project not found",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            )
-    })
+            content = @Content(array = @ArraySchema(schema = @Schema(implementation = ProjectMemberResponse.class)))
+    )
+    @ApiResponse(
+            responseCode = "404",
+            description = "Project not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
     public ResponseEntity<List<ProjectMemberResponse>> findAll(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long projectId,
@@ -131,14 +126,12 @@ public class ProjectMemberController {
 
     @DeleteMapping("/{memberId}")
     @Operation(summary = "Deactivate a project member")
-    @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Member deactivated"),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "Project or member not found",
-                    content = @Content(schema = @Schema(implementation = ApiError.class))
-            )
-    })
+    @ApiResponse(responseCode = "204", description = "Member deactivated")
+    @ApiResponse(
+            responseCode = "404",
+            description = "Project or member not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class))
+    )
     public ResponseEntity<Void> deactivate(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long projectId,

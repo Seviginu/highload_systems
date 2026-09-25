@@ -3,6 +3,7 @@ package itmo.project.service;
 import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
 import itmo.project.dto.AddProjectMemberRequest;
+import itmo.project.dto.ProjectMemberResponse;
 import itmo.project.entity.Project;
 import itmo.project.entity.ProjectMember;
 import itmo.project.entity.ProjectStatus;
@@ -71,7 +72,7 @@ class ProjectMemberServiceImplTest {
     @Test
     void shouldAddMember() {
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-        when(userService.findById(2L)).thenReturn(userResponse(UserRole.DEVELOPER));
+        when(userService.findById(2L)).thenReturn(userResponse());
         when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.empty());
         when(entityManager.getReference(User.class, 2L)).thenReturn(user);
         when(memberRepository.saveAndFlush(any(ProjectMember.class)))
@@ -88,10 +89,11 @@ class ProjectMemberServiceImplTest {
     void shouldRejectActiveDuplicate() {
         ProjectMember existing = new ProjectMember(project, user);
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-        when(userService.findById(2L)).thenReturn(userResponse(UserRole.DEVELOPER));
+        when(userService.findById(2L)).thenReturn(userResponse());
         when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.of(existing));
+        AddProjectMemberRequest request = new AddProjectMemberRequest(2L);
 
-        assertThatThrownBy(() -> memberService.add(1L, new AddProjectMemberRequest(2L)))
+        assertThatThrownBy(() -> memberService.add(1L, request))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("already an active member");
         verify(memberRepository, never()).saveAndFlush(existing);
@@ -102,7 +104,7 @@ class ProjectMemberServiceImplTest {
         ProjectMember existing = new ProjectMember(project, user);
         existing.deactivate();
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-        when(userService.findById(2L)).thenReturn(userResponse(UserRole.DEVELOPER));
+        when(userService.findById(2L)).thenReturn(userResponse());
         when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.of(existing));
         when(memberRepository.saveAndFlush(existing)).thenReturn(existing);
 
@@ -114,7 +116,7 @@ class ProjectMemberServiceImplTest {
     @Test
     void shouldRequireTeamLeadRoleForProjectCreation() {
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-        when(userService.findById(2L)).thenReturn(userResponse(UserRole.DEVELOPER));
+        when(userService.findById(2L)).thenReturn(userResponse());
 
         assertThatThrownBy(() -> memberService.assignTeamLead(1L, 2L))
                 .isInstanceOf(ConflictException.class)
@@ -133,7 +135,7 @@ class ProjectMemberServiceImplTest {
         var result = memberService.findAll(1L, pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
-        assertThat(result.getContent()).extracting(response -> response.userId()).containsExactly(2L);
+        assertThat(result.getContent()).extracting(ProjectMemberResponse::userId).containsExactly(2L);
     }
 
     @Test
@@ -159,13 +161,14 @@ class ProjectMemberServiceImplTest {
     @Test
     void shouldReportMissingProject() {
         when(projectRepository.existsById(42L)).thenReturn(false);
+        PageRequest pageable = PageRequest.of(0, 20);
 
-        assertThatThrownBy(() -> memberService.findAll(42L, PageRequest.of(0, 20)))
+        assertThatThrownBy(() -> memberService.findAll(42L, pageable))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("42");
     }
 
-    private UserResponse userResponse(UserRole role) {
-        return new UserResponse(2L, "Alice", "alice@example.com", role, Instant.now(), Instant.now());
+    private UserResponse userResponse() {
+        return new UserResponse(2L, "Alice", "alice@example.com", UserRole.DEVELOPER, Instant.now(), Instant.now());
     }
 }

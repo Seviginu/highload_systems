@@ -4,6 +4,7 @@ import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
 import itmo.user.dto.CreateUserRequest;
 import itmo.user.dto.UpdateUserRequest;
+import itmo.user.dto.UserResponse;
 import itmo.user.entity.User;
 import itmo.user.entity.UserRole;
 import itmo.user.mapper.UserMapper;
@@ -23,6 +24,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -90,7 +92,7 @@ class UserServiceImplTest {
         var result = userService.findAll(pageable);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
-        assertThat(result.getContent()).extracting(response -> response.email())
+        assertThat(result.getContent()).extracting(UserResponse::email)
                 .containsExactly("alice@example.com");
     }
 
@@ -162,7 +164,7 @@ class UserServiceImplTest {
     void shouldRejectDeletionOfReferencedUser() {
         User user = new User("Alice", "alice@example.com", UserRole.DEVELOPER);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        org.mockito.Mockito.doThrow(new DataIntegrityViolationException("foreign key"))
+        doThrow(new DataIntegrityViolationException("foreign key"))
                 .when(userRepository).flush();
 
         assertThatThrownBy(() -> userService.delete(1L))

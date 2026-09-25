@@ -14,7 +14,7 @@ public record UpdateProjectRequest(
         @NotBlank(message = "Code must not be blank")
         @Size(min = 2, max = 20, message = "Code must contain from 2 to 20 characters")
         @Pattern(
-                regexp = "^[A-Za-z][A-Za-z0-9_]{1,19}$",
+                regexp = "^[A-Za-z]\\w{1,19}$",
                 message = "Code must start with a letter and contain only letters, digits or underscores"
         )
         String code,
