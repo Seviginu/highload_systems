@@ -25,15 +25,22 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,6 +58,11 @@ class TaskIT {
     @Container
     @ServiceConnection
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
+
+    @Container
+    @ServiceConnection
+    static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7.4-alpine"))
+            .withExposedPorts(6379);
 
     @Autowired
     private TestRestTemplate restTemplate;
@@ -76,13 +88,92 @@ class TaskIT {
     @Autowired
     private Validator validator;
 
+    @Autowired
+    private CacheManager cacheManager;
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
     @BeforeEach
     void cleanDatabase() {
+        taskCache().clear();
         taskRepository.deleteAll();
         projectMemberRepository.deleteAll();
         projectRepository.deleteAll();
         labelRepository.deleteAll();
         userRepository.deleteAll();
+    }
+
+    @Test
+    void shouldCacheTaskAndKeepCacheConsistentAfterWrites() {
+        TestData data = createTestData();
+        TaskResponse created = restTemplate.postForEntity(
+                "/api/tasks",
+                createRequest(data, "PLATFORM-1"),
+                TaskResponse.class
+        ).getBody();
+        assertThat(created).isNotNull();
+
+        TaskResponse cachedAfterCreate = taskCache().get(created.id(), TaskResponse.class);
+        assertThat(cachedAfterCreate).isNotNull();
+        assertThat(cachedAfterCreate.title()).isEqualTo("First task");
+        assertThat(redisTemplate.getExpire("tasks::" + created.id(), TimeUnit.SECONDS))
+                .isBetween(1L, 600L);
+
+        taskCache().clear();
+        jdbcTemplate.update("UPDATE tasks SET title = ? WHERE id = ?", "Loaded from database", created.id());
+        TaskResponse loadedFromDatabase = restTemplate.getForObject(
+                "/api/tasks/{id}",
+                TaskResponse.class,
+                created.id()
+        );
+        assertThat(loadedFromDatabase).isNotNull();
+        assertThat(loadedFromDatabase.title()).isEqualTo("Loaded from database");
+        assertThat(taskCache().get(created.id(), TaskResponse.class)).isNotNull();
+
+        jdbcTemplate.update("UPDATE tasks SET title = ? WHERE id = ?", "Changed outside service", created.id());
+        TaskResponse cachedRead = restTemplate.getForObject(
+                "/api/tasks/{id}",
+                TaskResponse.class,
+                created.id()
+        );
+        assertThat(cachedRead).isNotNull();
+        assertThat(cachedRead.title()).isEqualTo("Loaded from database");
+
+        var updateResponse = restTemplate.exchange(
+                "/api/tasks/{id}",
+                HttpMethod.PUT,
+                new HttpEntity<>(new UpdateTaskRequest(
+                        created.taskKey(),
+                        "Updated through service",
+                        created.description(),
+                        created.status(),
+                        created.priority(),
+                        created.authorId(),
+                        created.assigneeId(),
+                        created.projectId(),
+                        Set.copyOf(created.labelIds()),
+                        created.version()
+                )),
+                TaskResponse.class,
+                created.id()
+        );
+
+        assertThat(updateResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        TaskResponse cachedAfterUpdate = taskCache().get(created.id(), TaskResponse.class);
+        assertThat(cachedAfterUpdate).isNotNull();
+        assertThat(cachedAfterUpdate.title()).isEqualTo("Updated through service");
+
+        var deleteResponse = restTemplate.exchange(
+                "/api/tasks/{id}",
+                HttpMethod.DELETE,
+                HttpEntity.EMPTY,
+                Void.class,
+                created.id()
+        );
+
+        assertThat(deleteResponse.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(taskCache().get(created.id())).isNull();
     }
 
     @Test
@@ -298,6 +389,9 @@ class TaskIT {
         assertThat(moved.assigneeId()).isEqualTo(data.assignee().getId());
         assertThat(moved.labelIds()).containsExactly(targetLabel.getId());
         assertThat(moved.version()).isEqualTo(created.version() + 1);
+        TaskResponse cachedAfterMove = taskCache().get(created.id(), TaskResponse.class);
+        assertThat(cachedAfterMove).isNotNull();
+        assertThat(cachedAfterMove.projectId()).isEqualTo(targetProject.getId());
 
         var rejectedResponse = restTemplate.postForEntity(
                 "/api/tasks/{id}/move",
@@ -398,6 +492,10 @@ class TaskIT {
                 data.project().getId(),
                 Set.of(data.label().getId())
         );
+    }
+
+    private Cache taskCache() {
+        return Objects.requireNonNull(cacheManager.getCache("tasks"));
     }
 
     private record TestData(User author, User assignee, Project project, Label label) {

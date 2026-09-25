@@ -18,6 +18,9 @@ import itmo.task.repository.TaskRepository;
 import itmo.user.entity.User;
 import itmo.user.service.UserService;
 import jakarta.persistence.EntityManager;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
@@ -30,6 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
+
+import static itmo.infrastructure.cache.TaskCacheConfiguration.TASKS_CACHE;
 
 @Service
 public class TaskServiceImpl implements TaskService {
@@ -62,6 +67,7 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @Transactional
+    @CachePut(cacheNames = TASKS_CACHE, key = "#result.id()")
     public TaskResponse create(CreateTaskRequest request) {
         String normalizedKey = taskMapper.normalizeTaskKey(request.taskKey());
         ensureTaskKeyAvailable(normalizedKey);
@@ -81,6 +87,7 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = TASKS_CACHE, key = "#id", sync = true)
     public TaskResponse findById(Long id) {
         return taskMapper.toResponse(findEntity(id));
     }
@@ -109,6 +116,7 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @Transactional
+    @CachePut(cacheNames = TASKS_CACHE, key = "#id")
     public TaskResponse move(Long id, MoveTaskRequest request) {
         Task task = findEntity(id);
         if (!Objects.equals(task.getVersion(), request.version())) {
@@ -135,6 +143,7 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @Transactional
+    @CachePut(cacheNames = TASKS_CACHE, key = "#id")
     public TaskResponse update(Long id, UpdateTaskRequest request) {
         Task task = findEntity(id);
         if (!Objects.equals(task.getVersion(), request.version())) {
@@ -163,6 +172,7 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = TASKS_CACHE, key = "#id")
     public void delete(Long id) {
         Task task = findEntity(id);
         taskRepository.delete(task);

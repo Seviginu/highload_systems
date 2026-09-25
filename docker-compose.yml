@@ -39,6 +39,7 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-vs_lab1}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      TASK_CACHE_TTL: ${TASK_CACHE_TTL:-10m}
       SERVER_PORT: 8080
     ports:
       - "${SERVER_PORT:-8080}:8080"
