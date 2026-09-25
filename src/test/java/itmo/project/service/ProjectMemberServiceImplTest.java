@@ -10,11 +10,9 @@ import itmo.project.entity.ProjectStatus;
 import itmo.project.mapper.ProjectMemberMapper;
 import itmo.project.repository.ProjectMemberRepository;
 import itmo.project.repository.ProjectRepository;
-import itmo.user.dto.UserResponse;
 import itmo.user.entity.User;
 import itmo.user.entity.UserRole;
 import itmo.user.service.UserService;
-import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,7 +22,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -47,9 +44,6 @@ class ProjectMemberServiceImplTest {
     @Mock
     private UserService userService;
 
-    @Mock
-    private EntityManager entityManager;
-
     private ProjectMemberServiceImpl memberService;
     private Project project;
     private User user;
@@ -60,8 +54,7 @@ class ProjectMemberServiceImplTest {
                 memberRepository,
                 projectRepository,
                 userService,
-                new ProjectMemberMapper(),
-                entityManager
+                new ProjectMemberMapper()
         );
         project = new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE);
         user = new User("Alice", "alice@example.com", UserRole.DEVELOPER);
@@ -72,9 +65,8 @@ class ProjectMemberServiceImplTest {
     @Test
     void shouldAddMember() {
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-        when(userService.findById(2L)).thenReturn(userResponse());
+        when(userService.requireEntity(2L)).thenReturn(user);
         when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.empty());
-        when(entityManager.getReference(User.class, 2L)).thenReturn(user);
         when(memberRepository.saveAndFlush(any(ProjectMember.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -89,7 +81,7 @@ class ProjectMemberServiceImplTest {
     void shouldRejectActiveDuplicate() {
         ProjectMember existing = new ProjectMember(project, user);
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-        when(userService.findById(2L)).thenReturn(userResponse());
+        when(userService.requireEntity(2L)).thenReturn(user);
         when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.of(existing));
         AddProjectMemberRequest request = new AddProjectMemberRequest(2L);
 
@@ -104,7 +96,7 @@ class ProjectMemberServiceImplTest {
         ProjectMember existing = new ProjectMember(project, user);
         existing.deactivate();
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-        when(userService.findById(2L)).thenReturn(userResponse());
+        when(userService.requireEntity(2L)).thenReturn(user);
         when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.of(existing));
         when(memberRepository.saveAndFlush(existing)).thenReturn(existing);
 
@@ -116,7 +108,7 @@ class ProjectMemberServiceImplTest {
     @Test
     void shouldRequireTeamLeadRoleForProjectCreation() {
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-        when(userService.findById(2L)).thenReturn(userResponse());
+        when(userService.requireEntity(2L)).thenReturn(user);
 
         assertThatThrownBy(() -> memberService.assignTeamLead(1L, 2L))
                 .isInstanceOf(ConflictException.class)
@@ -168,7 +160,4 @@ class ProjectMemberServiceImplTest {
                 .hasMessageContaining("42");
     }
 
-    private UserResponse userResponse() {
-        return new UserResponse(2L, "Alice", "alice@example.com", UserRole.DEVELOPER, Instant.now(), Instant.now());
-    }
 }

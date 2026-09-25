@@ -46,6 +46,12 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
+    public User requireEntity(Long id) {
+        return findEntity(id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Page<UserResponse> findAll(Pageable pageable) {
         return userRepository.findAll(pageable).map(userMapper::toResponse);
     }
@@ -95,4 +101,3 @@ public class UserServiceImpl implements UserService {
         return new ConflictException("User with email '%s' already exists".formatted(email));
     }
 }
-

@@ -17,7 +17,6 @@ import itmo.task.mapper.TaskMapper;
 import itmo.task.repository.TaskRepository;
 import itmo.user.entity.User;
 import itmo.user.service.UserService;
-import jakarta.persistence.EntityManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
@@ -30,7 +29,6 @@ import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 
@@ -45,7 +43,6 @@ public class TaskServiceImpl implements TaskService {
     private final ProjectMemberService projectMemberService;
     private final UserService userService;
     private final LabelService labelService;
-    private final EntityManager entityManager;
 
     public TaskServiceImpl(
             TaskRepository taskRepository,
@@ -53,8 +50,7 @@ public class TaskServiceImpl implements TaskService {
             ProjectService projectService,
             ProjectMemberService projectMemberService,
             UserService userService,
-            LabelService labelService,
-            EntityManager entityManager
+            LabelService labelService
     ) {
         this.taskRepository = taskRepository;
         this.taskMapper = taskMapper;
@@ -62,7 +58,6 @@ public class TaskServiceImpl implements TaskService {
         this.projectMemberService = projectMemberService;
         this.userService = userService;
         this.labelService = labelService;
-        this.entityManager = entityManager;
     }
 
     @Override
@@ -185,13 +180,11 @@ public class TaskServiceImpl implements TaskService {
     }
 
     private Project resolveProject(Long projectId) {
-        projectService.findById(projectId);
-        return entityManager.getReference(Project.class, projectId);
+        return projectService.requireEntity(projectId);
     }
 
     private User resolveUser(Long userId) {
-        userService.findById(userId);
-        return entityManager.getReference(User.class, userId);
+        return userService.requireEntity(userId);
     }
 
     private User resolveOptionalUser(Long userId) {
@@ -199,15 +192,7 @@ public class TaskServiceImpl implements TaskService {
     }
 
     private Set<Label> resolveLabels(Set<Long> labelIds) {
-        Set<Label> labels = new LinkedHashSet<>();
-        if (labelIds == null) {
-            return labels;
-        }
-        for (Long labelId : labelIds) {
-            labelService.findById(labelId);
-            labels.add(entityManager.getReference(Label.class, labelId));
-        }
-        return labels;
+        return labelService.requireEntities(labelIds);
     }
 
     private void ensureTaskKeyAvailable(String taskKey) {

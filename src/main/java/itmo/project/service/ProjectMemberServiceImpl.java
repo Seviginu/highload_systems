@@ -12,7 +12,6 @@ import itmo.project.repository.ProjectRepository;
 import itmo.user.entity.User;
 import itmo.user.entity.UserRole;
 import itmo.user.service.UserService;
-import jakarta.persistence.EntityManager;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -26,20 +25,17 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     private final ProjectRepository projectRepository;
     private final UserService userService;
     private final ProjectMemberMapper memberMapper;
-    private final EntityManager entityManager;
 
     public ProjectMemberServiceImpl(
             ProjectMemberRepository memberRepository,
             ProjectRepository projectRepository,
             UserService userService,
-            ProjectMemberMapper memberMapper,
-            EntityManager entityManager
+            ProjectMemberMapper memberMapper
     ) {
         this.memberRepository = memberRepository;
         this.projectRepository = projectRepository;
         this.userService = userService;
         this.memberMapper = memberMapper;
-        this.entityManager = entityManager;
     }
 
     @Override
@@ -80,9 +76,9 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     private ProjectMemberResponse addMember(Long projectId, Long userId, boolean teamLeadRequired) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", projectId));
-        var userResponse = userService.findById(userId);
+        User user = userService.requireEntity(userId);
 
-        if (teamLeadRequired && userResponse.role() != UserRole.TEAM_LEAD) {
+        if (teamLeadRequired && user.getRole() != UserRole.TEAM_LEAD) {
             throw new ConflictException("User with id '%d' is not a team lead".formatted(userId));
         }
 
@@ -96,7 +92,6 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
             return memberMapper.toResponse(memberRepository.saveAndFlush(member));
         }
 
-        User user = entityManager.getReference(User.class, userId);
         try {
             return memberMapper.toResponse(memberRepository.saveAndFlush(new ProjectMember(project, user)));
         } catch (DataIntegrityViolationException exception) {

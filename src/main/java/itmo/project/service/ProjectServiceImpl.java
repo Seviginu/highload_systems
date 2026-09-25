@@ -54,6 +54,12 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional(readOnly = true)
+    public Project requireEntity(Long id) {
+        return findEntity(id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Page<ProjectResponse> findAll(Pageable pageable) {
         return projectRepository.findAll(pageable).map(projectMapper::toResponse);
     }

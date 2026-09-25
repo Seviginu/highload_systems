@@ -16,9 +16,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -88,6 +90,31 @@ class LabelServiceImplTest {
         assertThatThrownBy(() -> labelService.findById(42L))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("42");
+    }
+
+    @Test
+    void shouldResolveLabelsInSingleBatch() {
+        Label first = label("#A1B2C3");
+        Label second = new Label("Frontend", "#C3B2A1");
+        ReflectionTestUtils.setField(first, "id", 1L);
+        ReflectionTestUtils.setField(second, "id", 2L);
+        when(labelRepository.findAllById(Set.of(1L, 2L))).thenReturn(List.of(first, second));
+
+        var result = labelService.requireEntities(Set.of(1L, 2L));
+
+        assertThat(result).containsExactly(first, second);
+        verify(labelRepository).findAllById(Set.of(1L, 2L));
+    }
+
+    @Test
+    void shouldReportMissingLabelFromBatch() {
+        Label label = label("#A1B2C3");
+        ReflectionTestUtils.setField(label, "id", 1L);
+        when(labelRepository.findAllById(Set.of(1L, 2L))).thenReturn(List.of(label));
+
+        assertThatThrownBy(() -> labelService.requireEntities(Set.of(1L, 2L)))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("2");
     }
 
     @Test

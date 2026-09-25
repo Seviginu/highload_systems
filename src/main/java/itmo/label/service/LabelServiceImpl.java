@@ -14,6 +14,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 @Service
 public class LabelServiceImpl implements LabelService {
 
@@ -42,6 +46,25 @@ public class LabelServiceImpl implements LabelService {
     @Transactional(readOnly = true)
     public LabelResponse findById(Long id) {
         return labelMapper.toResponse(findEntity(id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Set<Label> requireEntities(Set<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return new LinkedHashSet<>();
+        }
+
+        var labels = labelRepository.findAllById(ids);
+        Set<Long> foundIds = labels.stream()
+                .map(Label::getId)
+                .collect(Collectors.toSet());
+        for (Long id : ids) {
+            if (!foundIds.contains(id)) {
+                throw new ResourceNotFoundException("Label", id);
+            }
+        }
+        return new LinkedHashSet<>(labels);
     }
 
     @Override

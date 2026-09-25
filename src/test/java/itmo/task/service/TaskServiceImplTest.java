@@ -2,10 +2,8 @@ package itmo.task.service;
 
 import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
-import itmo.label.dto.LabelResponse;
 import itmo.label.entity.Label;
 import itmo.label.service.LabelService;
-import itmo.project.dto.ProjectResponse;
 import itmo.project.entity.Project;
 import itmo.project.entity.ProjectStatus;
 import itmo.project.service.ProjectMemberService;
@@ -19,11 +17,9 @@ import itmo.task.entity.TaskPriority;
 import itmo.task.entity.TaskStatus;
 import itmo.task.mapper.TaskMapper;
 import itmo.task.repository.TaskRepository;
-import itmo.user.dto.UserResponse;
 import itmo.user.entity.User;
 import itmo.user.entity.UserRole;
 import itmo.user.service.UserService;
-import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,7 +32,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.SliceImpl;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -66,9 +61,6 @@ class TaskServiceImplTest {
     @Mock
     private LabelService labelService;
 
-    @Mock
-    private EntityManager entityManager;
-
     private TaskServiceImpl taskService;
     private Project project;
     private User author;
@@ -82,8 +74,7 @@ class TaskServiceImplTest {
                 projectService,
                 projectMemberService,
                 userService,
-                labelService,
-                entityManager
+                labelService
         );
         project = new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE);
         author = new User("Author", "author@example.com", UserRole.TEAM_LEAD);
@@ -148,7 +139,7 @@ class TaskServiceImplTest {
     @Test
     void shouldPropagateMissingRelatedResource() {
         when(taskRepository.existsByTaskKey("PLATFORM-1")).thenReturn(false);
-        when(projectService.findById(1L)).thenThrow(new ResourceNotFoundException("Project", 1L));
+        when(projectService.requireEntity(1L)).thenThrow(new ResourceNotFoundException("Project", 1L));
         CreateTaskRequest request = createRequest();
 
         assertThatThrownBy(() -> taskService.create(request))
@@ -193,13 +184,10 @@ class TaskServiceImplTest {
         ReflectionTestUtils.setField(targetProject, "id", 4L);
         ReflectionTestUtils.setField(assignee, "id", 5L);
         when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
-        when(projectService.findById(4L)).thenReturn(projectResponse());
-        when(userService.findById(5L)).thenReturn(userResponse());
+        when(projectService.requireEntity(4L)).thenReturn(targetProject);
+        when(userService.requireEntity(5L)).thenReturn(assignee);
         when(projectMemberService.isActiveMember(4L, 5L)).thenReturn(true);
-        when(labelService.findById(3L)).thenReturn(labelResponse());
-        when(entityManager.getReference(Project.class, 4L)).thenReturn(targetProject);
-        when(entityManager.getReference(User.class, 5L)).thenReturn(assignee);
-        when(entityManager.getReference(Label.class, 3L)).thenReturn(label);
+        when(labelService.requireEntities(Set.of(3L))).thenReturn(Set.of(label));
         when(taskRepository.saveAndFlush(task)).thenReturn(task);
 
         var response = taskService.move(10L, new MoveTaskRequest(4L, 5L, Set.of(3L), 0L));
@@ -217,10 +205,8 @@ class TaskServiceImplTest {
         ReflectionTestUtils.setField(targetProject, "id", 4L);
         ReflectionTestUtils.setField(assignee, "id", 5L);
         when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
-        when(projectService.findById(4L)).thenReturn(projectResponse());
-        when(userService.findById(5L)).thenReturn(userResponse());
-        when(entityManager.getReference(Project.class, 4L)).thenReturn(targetProject);
-        when(entityManager.getReference(User.class, 5L)).thenReturn(assignee);
+        when(projectService.requireEntity(4L)).thenReturn(targetProject);
+        when(userService.requireEntity(5L)).thenReturn(assignee);
         MoveTaskRequest request = new MoveTaskRequest(4L, 5L, Set.of(3L), 0L);
 
         assertThatThrownBy(() -> taskService.move(10L, request))
@@ -262,7 +248,7 @@ class TaskServiceImplTest {
         assertThatThrownBy(() -> taskService.update(10L, request))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("modified by another request");
-        verify(projectService, never()).findById(any());
+        verify(projectService, never()).requireEntity(any());
     }
 
     @Test
@@ -318,16 +304,13 @@ class TaskServiceImplTest {
     }
 
     private void prepareProjectAndAuthor() {
-        when(projectService.findById(1L)).thenReturn(projectResponse());
-        when(userService.findById(2L)).thenReturn(userResponse());
-        when(entityManager.getReference(Project.class, 1L)).thenReturn(project);
-        when(entityManager.getReference(User.class, 2L)).thenReturn(author);
+        when(projectService.requireEntity(1L)).thenReturn(project);
+        when(userService.requireEntity(2L)).thenReturn(author);
     }
 
     private void prepareRelations() {
         prepareProjectAndAuthor();
-        when(labelService.findById(3L)).thenReturn(labelResponse());
-        when(entityManager.getReference(Label.class, 3L)).thenReturn(label);
+        when(labelService.requireEntities(Set.of(3L))).thenReturn(Set.of(label));
     }
 
     private Task task() {
@@ -344,15 +327,4 @@ class TaskServiceImplTest {
         return task;
     }
 
-    private ProjectResponse projectResponse() {
-        return new ProjectResponse(1L, "Platform", "PLATFORM", null, ProjectStatus.ACTIVE, Instant.now(), Instant.now());
-    }
-
-    private UserResponse userResponse() {
-        return new UserResponse(2L, "Author", "author@example.com", UserRole.TEAM_LEAD, Instant.now(), Instant.now());
-    }
-
-    private LabelResponse labelResponse() {
-        return new LabelResponse(3L, "Backend", "#112233", Instant.now());
-    }
 }
