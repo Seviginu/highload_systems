@@ -416,6 +416,44 @@ class TaskIT {
     }
 
     @Test
+    void shouldRejectProjectChangeThroughRegularUpdate() {
+        TestData data = createTestData();
+        Project targetProject = projectRepository.saveAndFlush(
+                new Project("Mobile", "MOBILE", null, ProjectStatus.ACTIVE)
+        );
+        TaskResponse created = restTemplate.postForEntity(
+                "/api/tasks",
+                createRequest(data, "PLATFORM-1"),
+                TaskResponse.class
+        ).getBody();
+        assertThat(created).isNotNull();
+
+        var response = restTemplate.exchange(
+                "/api/tasks/{id}",
+                HttpMethod.PUT,
+                new HttpEntity<>(new UpdateTaskRequest(
+                        created.taskKey(),
+                        created.title(),
+                        created.description(),
+                        created.status(),
+                        created.priority(),
+                        created.authorId(),
+                        created.assigneeId(),
+                        targetProject.getId(),
+                        Set.copyOf(created.labelIds()),
+                        created.version()
+                )),
+                String.class,
+                created.id()
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).contains("move operation");
+        Task persisted = taskRepository.findById(created.id()).orElseThrow();
+        assertThat(persisted.getProject().getId()).isEqualTo(data.project().getId());
+    }
+
+    @Test
     void shouldValidateTaskEntity() {
         TestData data = createTestData();
         Task invalidTask = new Task(

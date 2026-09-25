@@ -9,11 +9,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 
 import java.time.Duration;
+import java.util.Map;
 
 @Configuration
 @EnableCaching
@@ -35,10 +37,28 @@ public class TaskCacheConfiguration {
                         RedisSerializationContext.SerializationPair.fromSerializer(valueSerializer)
                 );
 
-        return RedisCacheManager.builder(connectionFactory)
-                .withCacheConfiguration(TASKS_CACHE, taskCacheConfiguration)
-                .disableCreateOnMissingCache()
-                .transactionAware()
-                .build();
+        var cacheManager = new ResilientRedisCacheManager(
+                RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory),
+                taskCacheConfiguration,
+                Map.of(TASKS_CACHE, taskCacheConfiguration)
+        );
+        cacheManager.setTransactionAware(true);
+        return cacheManager;
+    }
+
+    private static final class ResilientRedisCacheManager extends RedisCacheManager {
+
+        private ResilientRedisCacheManager(
+                RedisCacheWriter cacheWriter,
+                RedisCacheConfiguration defaultConfiguration,
+                Map<String, RedisCacheConfiguration> initialConfigurations
+        ) {
+            super(cacheWriter, defaultConfiguration, false, initialConfigurations);
+        }
+
+        @Override
+        protected org.springframework.cache.Cache decorateCache(org.springframework.cache.Cache cache) {
+            return super.decorateCache(new ResilientCache(cache));
+        }
     }
 }

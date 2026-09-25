@@ -63,6 +63,8 @@ class ProjectIT {
 
     @BeforeEach
     void cleanDatabase() {
+        jdbcTemplate.update("DELETE FROM task_labels");
+        jdbcTemplate.update("DELETE FROM tasks");
         projectMemberRepository.deleteAll();
         projectRepository.deleteAll();
         userRepository.deleteAll();
@@ -250,6 +252,37 @@ class ProjectIT {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(projectRepository.count()).isZero();
         assertThat(projectMemberRepository.count()).isZero();
+    }
+
+    @Test
+    void shouldRejectDeletingProjectReferencedByTasks() {
+        User teamLead = createTeamLead();
+        ProjectResponse project = restTemplate.postForEntity(
+                "/api/projects",
+                new CreateProjectRequest("Platform", "PLATFORM", null, ProjectStatus.ACTIVE, teamLead.getId()),
+                ProjectResponse.class
+        ).getBody();
+        assertThat(project).isNotNull();
+        jdbcTemplate.update(
+                """
+                        INSERT INTO tasks (task_key, title, status, priority, author_id, project_id)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                "PLATFORM-1", "Task", "TODO", "MEDIUM", teamLead.getId(), project.id()
+        );
+
+        var response = restTemplate.exchange(
+                "/api/projects/{id}",
+                HttpMethod.DELETE,
+                HttpEntity.EMPTY,
+                String.class,
+                project.id()
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).contains("referenced by tasks");
+        assertThat(projectRepository.existsById(project.id())).isTrue();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM tasks", Integer.class)).isEqualTo(1);
     }
 
     @Test

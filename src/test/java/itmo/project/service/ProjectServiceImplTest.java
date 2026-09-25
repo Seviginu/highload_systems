@@ -75,7 +75,7 @@ class ProjectServiceImplTest {
         CreateProjectRequest request = request("Platform", "PLATFORM");
         when(projectRepository.existsByCode("PLATFORM")).thenReturn(false);
         when(projectRepository.saveAndFlush(any(Project.class)))
-                .thenThrow(new DataIntegrityViolationException("duplicate"));
+                .thenThrow(new DataIntegrityViolationException("uq_projects_code"));
 
         assertThatThrownBy(() -> projectService.create(request))
                 .isInstanceOf(ConflictException.class)
@@ -154,7 +154,7 @@ class ProjectServiceImplTest {
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
         when(projectRepository.existsByCodeAndIdNot("PLATFORM_2", 1L)).thenReturn(false);
         when(projectRepository.saveAndFlush(project))
-                .thenThrow(new DataIntegrityViolationException("duplicate"));
+                .thenThrow(new DataIntegrityViolationException("uq_projects_code"));
 
         assertThatThrownBy(() -> projectService.update(1L, request))
                 .isInstanceOf(ConflictException.class)
@@ -176,7 +176,7 @@ class ProjectServiceImplTest {
     void shouldRejectDeletionOfReferencedProject() {
         Project project = project(ProjectStatus.PLANNED);
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-        doThrow(new DataIntegrityViolationException("foreign key"))
+        doThrow(new DataIntegrityViolationException("fk_tasks_project"))
                 .when(projectRepository).flush();
 
         assertThatThrownBy(() -> projectService.delete(1L))

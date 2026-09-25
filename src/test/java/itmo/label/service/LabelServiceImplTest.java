@@ -69,7 +69,7 @@ class LabelServiceImplTest {
     void shouldTranslateDatabaseConflictDuringCreate() {
         when(labelRepository.existsByNameIgnoreCase("Backend")).thenReturn(false);
         when(labelRepository.saveAndFlush(any(Label.class)))
-                .thenThrow(new DataIntegrityViolationException("duplicate"));
+                .thenThrow(new DataIntegrityViolationException("uq_labels_name_lower"));
         CreateLabelRequest request = new CreateLabelRequest("Backend", null);
 
         assertThatThrownBy(() -> labelService.create(request))
@@ -160,7 +160,7 @@ class LabelServiceImplTest {
         when(labelRepository.findById(1L)).thenReturn(Optional.of(label));
         when(labelRepository.existsByNameIgnoreCaseAndIdNot("API", 1L)).thenReturn(false);
         when(labelRepository.saveAndFlush(label))
-                .thenThrow(new DataIntegrityViolationException("duplicate"));
+                .thenThrow(new DataIntegrityViolationException("uq_labels_name_lower"));
         UpdateLabelRequest request = new UpdateLabelRequest("API", null);
 
         assertThatThrownBy(() -> labelService.update(1L, request))
@@ -182,7 +182,7 @@ class LabelServiceImplTest {
     void shouldRejectDeletionOfReferencedLabel() {
         Label label = label(null);
         when(labelRepository.findById(1L)).thenReturn(Optional.of(label));
-        doThrow(new DataIntegrityViolationException("foreign key")).when(labelRepository).flush();
+        doThrow(new DataIntegrityViolationException("fk_task_labels_label")).when(labelRepository).flush();
 
         assertThatThrownBy(() -> labelService.delete(1L))
                 .isInstanceOf(ConflictException.class)

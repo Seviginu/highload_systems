@@ -14,6 +14,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import static itmo.common.persistence.ConstraintViolationDetector.isViolationOf;
+
 @Service
 public class UserServiceImpl implements UserService {
 
@@ -34,7 +36,10 @@ public class UserServiceImpl implements UserService {
         try {
             return userMapper.toResponse(userRepository.saveAndFlush(userMapper.toEntity(request)));
         } catch (DataIntegrityViolationException exception) {
-            throw emailConflict(normalizedEmail);
+            if (isViolationOf(exception, "uq_users_email_lower")) {
+                throw emailConflict(normalizedEmail);
+            }
+            throw exception;
         }
     }
 
@@ -70,7 +75,10 @@ public class UserServiceImpl implements UserService {
         try {
             return userMapper.toResponse(userRepository.saveAndFlush(user));
         } catch (DataIntegrityViolationException exception) {
-            throw emailConflict(normalizedEmail);
+            if (isViolationOf(exception, "uq_users_email_lower")) {
+                throw emailConflict(normalizedEmail);
+            }
+            throw exception;
         }
     }
 
@@ -82,7 +90,10 @@ public class UserServiceImpl implements UserService {
             userRepository.delete(user);
             userRepository.flush();
         } catch (DataIntegrityViolationException exception) {
-            throw new ConflictException("User is referenced by other records and cannot be deleted");
+            if (isViolationOf(exception, "fk_tasks_author", "fk_tasks_assignee")) {
+                throw new ConflictException("User is referenced by other records and cannot be deleted");
+            }
+            throw exception;
         }
     }
 

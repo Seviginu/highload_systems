@@ -129,7 +129,7 @@ class TaskServiceImplTest {
         prepareRelations();
         when(taskRepository.existsByTaskKey("PLATFORM-1")).thenReturn(false);
         when(taskRepository.saveAndFlush(any(Task.class)))
-                .thenThrow(new DataIntegrityViolationException("duplicate"));
+                .thenThrow(new DataIntegrityViolationException("uq_tasks_task_key"));
         CreateTaskRequest request = createRequest();
 
         assertThatThrownBy(() -> taskService.create(request))
@@ -261,6 +261,22 @@ class TaskServiceImplTest {
         assertThatThrownBy(() -> taskService.update(10L, request))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("PLATFORM-2");
+    }
+
+    @Test
+    void shouldRejectProjectChangeThroughRegularUpdate() {
+        Task task = task();
+        when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
+        UpdateTaskRequest request = new UpdateTaskRequest(
+                "PLATFORM-2", "Updated", null, TaskStatus.IN_PROGRESS, TaskPriority.CRITICAL,
+                2L, null, 4L, Set.of(3L), 0L
+        );
+
+        assertThatThrownBy(() -> taskService.update(10L, request))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("move operation");
+        verify(projectService, never()).requireEntity(any());
+        verify(taskRepository, never()).saveAndFlush(task);
     }
 
     @Test

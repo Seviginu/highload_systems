@@ -50,6 +50,11 @@ class LabelIT {
 
     @BeforeEach
     void cleanDatabase() {
+        jdbcTemplate.update("DELETE FROM task_labels");
+        jdbcTemplate.update("DELETE FROM tasks");
+        jdbcTemplate.update("DELETE FROM project_members");
+        jdbcTemplate.update("DELETE FROM projects");
+        jdbcTemplate.update("DELETE FROM users");
         labelRepository.deleteAll();
     }
 
@@ -138,6 +143,55 @@ class LabelIT {
         assertThat(duplicateResponse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(duplicateResponse.getBody()).contains("already exists");
         assertThat(labelRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldRejectDeletingLabelReferencedByTasks() {
+        Label label = labelRepository.saveAndFlush(new Label("Backend", null));
+        Long userId = jdbcTemplate.queryForObject(
+                """
+                        INSERT INTO users (name, email, role)
+                        VALUES ('Author', 'author@example.com', 'TEAM_LEAD')
+                        RETURNING id
+                        """,
+                Long.class
+        );
+        Long projectId = jdbcTemplate.queryForObject(
+                """
+                        INSERT INTO projects (name, code, status)
+                        VALUES ('Platform', 'PLATFORM', 'ACTIVE')
+                        RETURNING id
+                        """,
+                Long.class
+        );
+        Long taskId = jdbcTemplate.queryForObject(
+                """
+                        INSERT INTO tasks (task_key, title, status, priority, author_id, project_id)
+                        VALUES ('PLATFORM-1', 'Task', 'TODO', 'MEDIUM', ?, ?)
+                        RETURNING id
+                        """,
+                Long.class,
+                userId,
+                projectId
+        );
+        jdbcTemplate.update(
+                "INSERT INTO task_labels (task_id, label_id) VALUES (?, ?)",
+                taskId,
+                label.getId()
+        );
+
+        var response = restTemplate.exchange(
+                "/api/labels/{id}",
+                HttpMethod.DELETE,
+                HttpEntity.EMPTY,
+                String.class,
+                label.getId()
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).contains("referenced by tasks");
+        assertThat(labelRepository.existsById(label.getId())).isTrue();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM task_labels", Integer.class)).isEqualTo(1);
     }
 
     @Test

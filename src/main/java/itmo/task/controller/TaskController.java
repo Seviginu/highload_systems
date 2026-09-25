@@ -185,7 +185,7 @@ public class TaskController {
     )
     @ApiResponse(
             responseCode = "409",
-            description = "Task key or version conflict",
+            description = "Task key, version or project change conflict",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
     public TaskResponse update(

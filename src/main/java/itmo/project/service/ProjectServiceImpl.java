@@ -14,6 +14,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import static itmo.common.persistence.ConstraintViolationDetector.isViolationOf;
+
 @Service
 public class ProjectServiceImpl implements ProjectService {
 
@@ -42,7 +44,10 @@ public class ProjectServiceImpl implements ProjectService {
             projectMemberService.assignTeamLead(project.getId(), request.teamLeadId());
             return projectMapper.toResponse(project);
         } catch (DataIntegrityViolationException exception) {
-            throw codeConflict(normalizedCode);
+            if (isViolationOf(exception, "uq_projects_code")) {
+                throw codeConflict(normalizedCode);
+            }
+            throw exception;
         }
     }
 
@@ -78,7 +83,10 @@ public class ProjectServiceImpl implements ProjectService {
         try {
             return projectMapper.toResponse(projectRepository.saveAndFlush(project));
         } catch (DataIntegrityViolationException exception) {
-            throw codeConflict(normalizedCode);
+            if (isViolationOf(exception, "uq_projects_code")) {
+                throw codeConflict(normalizedCode);
+            }
+            throw exception;
         }
     }
 
@@ -90,7 +98,10 @@ public class ProjectServiceImpl implements ProjectService {
             projectRepository.delete(project);
             projectRepository.flush();
         } catch (DataIntegrityViolationException exception) {
-            throw new ConflictException("Project is referenced by other records and cannot be deleted");
+            if (isViolationOf(exception, "fk_tasks_project")) {
+                throw new ConflictException("Project is referenced by tasks and cannot be deleted");
+            }
+            throw exception;
         }
     }
 

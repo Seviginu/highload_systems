@@ -142,7 +142,7 @@ class UserServiceImplTest {
         );
         when(userRepository.existsByEmailIgnoreCase("alice@example.com")).thenReturn(false);
         when(userRepository.saveAndFlush(any(User.class)))
-                .thenThrow(new DataIntegrityViolationException("duplicate"));
+                .thenThrow(new DataIntegrityViolationException("uq_users_email_lower"));
 
         assertThatThrownBy(() -> userService.create(request))
                 .isInstanceOf(ConflictException.class)
@@ -164,7 +164,7 @@ class UserServiceImplTest {
     void shouldRejectDeletionOfReferencedUser() {
         User user = new User("Alice", "alice@example.com", UserRole.DEVELOPER);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        doThrow(new DataIntegrityViolationException("foreign key"))
+        doThrow(new DataIntegrityViolationException("fk_tasks_author"))
                 .when(userRepository).flush();
 
         assertThatThrownBy(() -> userService.delete(1L))

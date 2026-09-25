@@ -18,6 +18,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import static itmo.common.persistence.ConstraintViolationDetector.isViolationOf;
+
 @Service
 public class ProjectMemberServiceImpl implements ProjectMemberService {
 
@@ -95,7 +97,10 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         try {
             return memberMapper.toResponse(memberRepository.saveAndFlush(new ProjectMember(project, user)));
         } catch (DataIntegrityViolationException exception) {
-            throw memberConflict(projectId, userId);
+            if (isViolationOf(exception, "uq_project_members_project_user")) {
+                throw memberConflict(projectId, userId);
+            }
+            throw exception;
         }
     }
 

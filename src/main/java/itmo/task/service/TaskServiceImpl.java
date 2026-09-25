@@ -32,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Objects;
 import java.util.Set;
 
+import static itmo.common.persistence.ConstraintViolationDetector.isViolationOf;
 import static itmo.infrastructure.cache.TaskCacheConfiguration.TASKS_CACHE;
 
 @Service
@@ -76,7 +77,10 @@ public class TaskServiceImpl implements TaskService {
             Task task = taskMapper.toEntity(request, author, assignee, project, labels);
             return taskMapper.toResponse(taskRepository.saveAndFlush(task));
         } catch (DataIntegrityViolationException exception) {
-            throw taskKeyConflict(normalizedKey);
+            if (isViolationOf(exception, "uq_tasks_task_key")) {
+                throw taskKeyConflict(normalizedKey);
+            }
+            throw exception;
         }
     }
 
@@ -117,7 +121,6 @@ public class TaskServiceImpl implements TaskService {
         if (!Objects.equals(task.getVersion(), request.version())) {
             throw versionConflict(id);
         }
-
         Project project = resolveProject(request.projectId());
         User assignee = resolveOptionalUser(request.assigneeId());
         if (assignee != null && !projectMemberService.isActiveMember(request.projectId(), request.assigneeId())) {
@@ -144,6 +147,9 @@ public class TaskServiceImpl implements TaskService {
         if (!Objects.equals(task.getVersion(), request.version())) {
             throw versionConflict(id);
         }
+        if (!Objects.equals(task.getProject().getId(), request.projectId())) {
+            throw new ConflictException("Use the task move operation to change a task project");
+        }
 
         String normalizedKey = taskMapper.normalizeTaskKey(request.taskKey());
         if (taskRepository.existsByTaskKeyAndIdNot(normalizedKey, id)) {
@@ -161,7 +167,10 @@ public class TaskServiceImpl implements TaskService {
         } catch (OptimisticLockingFailureException exception) {
             throw versionConflict(id);
         } catch (DataIntegrityViolationException exception) {
-            throw taskKeyConflict(normalizedKey);
+            if (isViolationOf(exception, "uq_tasks_task_key")) {
+                throw taskKeyConflict(normalizedKey);
+            }
+            throw exception;
         }
     }
 

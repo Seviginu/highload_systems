@@ -18,6 +18,8 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static itmo.common.persistence.ConstraintViolationDetector.isViolationOf;
+
 @Service
 public class LabelServiceImpl implements LabelService {
 
@@ -38,7 +40,10 @@ public class LabelServiceImpl implements LabelService {
         try {
             return labelMapper.toResponse(labelRepository.saveAndFlush(labelMapper.toEntity(request)));
         } catch (DataIntegrityViolationException exception) {
-            throw nameConflict(normalizedName);
+            if (isViolationOf(exception, "uq_labels_name_lower")) {
+                throw nameConflict(normalizedName);
+            }
+            throw exception;
         }
     }
 
@@ -87,7 +92,10 @@ public class LabelServiceImpl implements LabelService {
         try {
             return labelMapper.toResponse(labelRepository.saveAndFlush(label));
         } catch (DataIntegrityViolationException exception) {
-            throw nameConflict(normalizedName);
+            if (isViolationOf(exception, "uq_labels_name_lower")) {
+                throw nameConflict(normalizedName);
+            }
+            throw exception;
         }
     }
 
@@ -99,7 +107,10 @@ public class LabelServiceImpl implements LabelService {
             labelRepository.delete(label);
             labelRepository.flush();
         } catch (DataIntegrityViolationException exception) {
-            throw new ConflictException("Label is referenced by tasks and cannot be deleted");
+            if (isViolationOf(exception, "fk_task_labels_label")) {
+                throw new ConflictException("Label is referenced by tasks and cannot be deleted");
+            }
+            throw exception;
         }
     }
 
