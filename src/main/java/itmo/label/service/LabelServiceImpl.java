@@ -8,6 +8,7 @@ import itmo.label.dto.UpdateLabelRequest;
 import itmo.label.entity.Label;
 import itmo.label.mapper.LabelMapper;
 import itmo.label.repository.LabelRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,15 +22,11 @@ import java.util.stream.Collectors;
 import static itmo.common.persistence.ConstraintViolationDetector.isViolationOf;
 
 @Service
+@RequiredArgsConstructor
 public class LabelServiceImpl implements LabelService {
 
     private final LabelRepository labelRepository;
     private final LabelMapper labelMapper;
-
-    public LabelServiceImpl(LabelRepository labelRepository, LabelMapper labelMapper) {
-        this.labelRepository = labelRepository;
-        this.labelMapper = labelMapper;
-    }
 
     @Override
     @Transactional

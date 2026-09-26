@@ -18,6 +18,7 @@ import itmo.task.mapper.TaskMapper;
 import itmo.task.repository.TaskRepository;
 import itmo.user.entity.User;
 import itmo.user.service.UserService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
@@ -37,6 +38,7 @@ import static itmo.common.persistence.ConstraintViolationDetector.isViolationOf;
 import static itmo.infrastructure.cache.TaskCacheConfiguration.TASKS_CACHE;
 
 @Service
+@RequiredArgsConstructor
 public class TaskServiceImpl implements TaskService {
 
     private final TaskRepository taskRepository;
@@ -45,22 +47,6 @@ public class TaskServiceImpl implements TaskService {
     private final ProjectMemberService projectMemberService;
     private final UserService userService;
     private final LabelService labelService;
-
-    public TaskServiceImpl(
-            TaskRepository taskRepository,
-            TaskMapper taskMapper,
-            ProjectService projectService,
-            ProjectMemberService projectMemberService,
-            UserService userService,
-            LabelService labelService
-    ) {
-        this.taskRepository = taskRepository;
-        this.taskMapper = taskMapper;
-        this.projectService = projectService;
-        this.projectMemberService = projectMemberService;
-        this.userService = userService;
-        this.labelService = labelService;
-    }
 
     @Override
     @Transactional

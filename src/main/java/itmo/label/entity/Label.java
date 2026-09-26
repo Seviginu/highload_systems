@@ -11,6 +11,7 @@ import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import lombok.Getter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.Instant;
@@ -19,6 +20,7 @@ import java.util.Set;
 
 @Entity
 @Table(name = "labels")
+@Getter
 public class Label {
 
     @Id
@@ -57,22 +59,6 @@ public class Label {
     public void update(String name, String color) {
         this.name = name;
         this.color = color;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getColor() {
-        return color;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
     }
 
     public Set<Task> getTasks() {

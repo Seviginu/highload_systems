@@ -37,7 +37,7 @@ import java.util.List;
 
 @Validated
 @RestController
-@RequestMapping("/api/projects")
+@RequestMapping("/api/v1/projects")
 @Tag(name = "Projects", description = "Project management")
 public class ProjectController {
 
@@ -90,11 +90,11 @@ public class ProjectController {
             description = "Project not found",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ProjectResponse findById(
+    public ResponseEntity<ProjectResponse> findById(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long id
     ) {
-        return projectService.findById(id);
+        return ResponseEntity.ok(projectService.findById(id));
     }
 
     @GetMapping
@@ -150,12 +150,12 @@ public class ProjectController {
             description = "Project code is already used",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ProjectResponse update(
+    public ResponseEntity<ProjectResponse> update(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long id,
             @Valid @RequestBody UpdateProjectRequest request
     ) {
-        return projectService.update(id, request);
+        return ResponseEntity.ok(projectService.update(id, request));
     }
 
     @DeleteMapping("/{id}")

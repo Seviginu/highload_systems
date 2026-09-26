@@ -8,6 +8,7 @@ import itmo.user.dto.UserResponse;
 import itmo.user.entity.User;
 import itmo.user.mapper.UserMapper;
 import itmo.user.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,15 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
 import static itmo.common.persistence.ConstraintViolationDetector.isViolationOf;
 
 @Service
+@RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final UserMapper userMapper;
-
-    public UserServiceImpl(UserRepository userRepository, UserMapper userMapper) {
-        this.userRepository = userRepository;
-        this.userMapper = userMapper;
-    }
 
     @Override
     @Transactional

@@ -12,6 +12,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotNull;
+import lombok.Getter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.Instant;
@@ -24,6 +25,7 @@ import java.time.Instant;
                 columnNames = {"project_id", "user_id"}
         )
 )
+@Getter
 public class ProjectMember {
 
     @Id
@@ -62,25 +64,5 @@ public class ProjectMember {
 
     public void deactivate() {
         active = false;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Project getProject() {
-        return project;
-    }
-
-    public User getUser() {
-        return user;
-    }
-
-    public Instant getJoinedAt() {
-        return joinedAt;
-    }
-
-    public boolean isActive() {
-        return active;
     }
 }

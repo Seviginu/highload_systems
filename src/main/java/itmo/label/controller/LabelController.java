@@ -37,7 +37,7 @@ import java.util.List;
 
 @Validated
 @RestController
-@RequestMapping("/api/labels")
+@RequestMapping("/api/v1/labels")
 @Tag(name = "Labels", description = "Task label management")
 public class LabelController {
 
@@ -90,11 +90,11 @@ public class LabelController {
             description = "Label not found",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public LabelResponse findById(
+    public ResponseEntity<LabelResponse> findById(
             @Parameter(description = "Label identifier", example = "1")
             @PathVariable Long id
     ) {
-        return labelService.findById(id);
+        return ResponseEntity.ok(labelService.findById(id));
     }
 
     @GetMapping
@@ -150,12 +150,12 @@ public class LabelController {
             description = "Label name is already used",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public LabelResponse update(
+    public ResponseEntity<LabelResponse> update(
             @Parameter(description = "Label identifier", example = "1")
             @PathVariable Long id,
             @Valid @RequestBody UpdateLabelRequest request
     ) {
-        return labelService.update(id, request);
+        return ResponseEntity.ok(labelService.update(id, request));
     }
 
     @DeleteMapping("/{id}")

@@ -35,7 +35,7 @@ import java.util.List;
 
 @Validated
 @RestController
-@RequestMapping("/api/projects/{projectId}/members")
+@RequestMapping("/api/v1/projects/{projectId}/members")
 @Tag(name = "Project members", description = "Project membership management")
 public class ProjectMemberController {
 

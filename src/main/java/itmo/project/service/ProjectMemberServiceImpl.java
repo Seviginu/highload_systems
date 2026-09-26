@@ -12,6 +12,7 @@ import itmo.project.repository.ProjectRepository;
 import itmo.user.entity.User;
 import itmo.user.entity.UserRole;
 import itmo.user.service.UserService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,24 +22,13 @@ import org.springframework.transaction.annotation.Transactional;
 import static itmo.common.persistence.ConstraintViolationDetector.isViolationOf;
 
 @Service
+@RequiredArgsConstructor
 public class ProjectMemberServiceImpl implements ProjectMemberService {
 
     private final ProjectMemberRepository memberRepository;
     private final ProjectRepository projectRepository;
     private final UserService userService;
     private final ProjectMemberMapper memberMapper;
-
-    public ProjectMemberServiceImpl(
-            ProjectMemberRepository memberRepository,
-            ProjectRepository projectRepository,
-            UserService userService,
-            ProjectMemberMapper memberMapper
-    ) {
-        this.memberRepository = memberRepository;
-        this.projectRepository = projectRepository;
-        this.userService = userService;
-        this.memberMapper = memberMapper;
-    }
 
     @Override
     @Transactional

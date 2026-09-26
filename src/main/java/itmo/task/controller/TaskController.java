@@ -43,7 +43,7 @@ import java.util.List;
 
 @Validated
 @RestController
-@RequestMapping("/api/tasks")
+@RequestMapping("/api/v1/tasks")
 @Tag(name = "Tasks", description = "Task management")
 public class TaskController {
 
@@ -101,11 +101,11 @@ public class TaskController {
             description = "Task not found",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public TaskResponse findById(
+    public ResponseEntity<TaskResponse> findById(
             @Parameter(description = "Task identifier", example = "1")
             @PathVariable Long id
     ) {
-        return taskService.findById(id);
+        return ResponseEntity.ok(taskService.findById(id));
     }
 
     @GetMapping
@@ -205,12 +205,12 @@ public class TaskController {
             description = "Task key, version or project change conflict",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public TaskResponse update(
+    public ResponseEntity<TaskResponse> update(
             @Parameter(description = "Task identifier", example = "1")
             @PathVariable Long id,
             @Valid @RequestBody UpdateTaskRequest request
     ) {
-        return taskService.update(id, request);
+        return ResponseEntity.ok(taskService.update(id, request));
     }
 
     @PostMapping("/{id}/move")
@@ -235,12 +235,12 @@ public class TaskController {
             description = "Assignee membership or version conflict",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public TaskResponse move(
+    public ResponseEntity<TaskResponse> move(
             @Parameter(description = "Task identifier", example = "1")
             @PathVariable Long id,
             @Valid @RequestBody MoveTaskRequest request
     ) {
-        return taskService.move(id, request);
+        return ResponseEntity.ok(taskService.move(id, request));
     }
 
     @DeleteMapping("/{id}")

@@ -37,7 +37,7 @@ import java.util.List;
 
 @Validated
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/api/v1/users")
 @Tag(name = "Users", description = "User management")
 public class UserController {
 
@@ -90,11 +90,11 @@ public class UserController {
             description = "User not found",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public UserResponse findById(
+    public ResponseEntity<UserResponse> findById(
             @Parameter(description = "User identifier", example = "1")
             @PathVariable Long id
     ) {
-        return userService.findById(id);
+        return ResponseEntity.ok(userService.findById(id));
     }
 
     @GetMapping
@@ -150,12 +150,12 @@ public class UserController {
             description = "Email is already used",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public UserResponse update(
+    public ResponseEntity<UserResponse> update(
             @Parameter(description = "User identifier", example = "1")
             @PathVariable Long id,
             @Valid @RequestBody UpdateUserRequest request
     ) {
-        return userService.update(id, request);
+        return ResponseEntity.ok(userService.update(id, request));
     }
 
     @DeleteMapping("/{id}")

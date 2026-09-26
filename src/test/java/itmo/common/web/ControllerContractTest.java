@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Max;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 
+import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.List;
@@ -25,6 +26,16 @@ class ControllerContractTest {
             LabelController.class,
             TaskController.class
     );
+
+    @Test
+    void shouldReturnResponseEntityFromEveryEndpoint() {
+        CONTROLLERS.stream()
+                .flatMap(controller -> Stream.of(controller.getDeclaredMethods()))
+                .filter(method -> Modifier.isPublic(method.getModifiers()))
+                .forEach(method -> assertThat(method.getReturnType())
+                        .as("%s.%s return type", method.getDeclaringClass().getSimpleName(), method.getName())
+                        .isEqualTo(ResponseEntity.class));
+    }
 
     @Test
     void shouldNeverExposeJpaEntities() {

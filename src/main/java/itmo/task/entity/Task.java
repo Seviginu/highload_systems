@@ -21,6 +21,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import lombok.Getter;
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -31,6 +32,7 @@ import java.util.Set;
 
 @Entity
 @Table(name = "tasks")
+@Getter
 public class Task {
 
     @Id
@@ -176,55 +178,7 @@ public class Task {
         });
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getTaskKey() {
-        return taskKey;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public TaskStatus getStatus() {
-        return status;
-    }
-
-    public TaskPriority getPriority() {
-        return priority;
-    }
-
-    public User getAuthor() {
-        return author;
-    }
-
-    public User getAssignee() {
-        return assignee;
-    }
-
-    public Project getProject() {
-        return project;
-    }
-
     public Set<Label> getLabels() {
         return Set.copyOf(labels);
-    }
-
-    public Long getVersion() {
-        return version;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
     }
 }
