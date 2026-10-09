@@ -1,10 +1,5 @@
 spring:
   application:
-    name: tracker-service
-
----
-spring:
+    name: discovery-server
   config:
-    activate:
-      on-profile: "!test"
     import: configserver:${CONFIG_SERVER_URL:http://localhost:8888}

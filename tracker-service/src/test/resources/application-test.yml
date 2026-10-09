@@ -1,0 +1,12 @@
+spring:
+  config:
+    import:
+      - classpath:config-repository/application.yml
+      - classpath:config-repository/tracker-service.yml
+  cloud:
+    config:
+      enabled: false
+
+eureka:
+  client:
+    enabled: false

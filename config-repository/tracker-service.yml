@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/vs_lab1}
+    username: ${DB_USERNAME:vs_lab1}
+    password: ${DB_PASSWORD:vs_lab1}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      repositories:
+        enabled: false
+app:
+  cache:
+    tasks:
+      ttl: ${TASK_CACHE_TTL:10m}
+server:
+  port: ${SERVER_PORT:8080}

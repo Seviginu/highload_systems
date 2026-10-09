@@ -1,7 +1,7 @@
 # План реализации ЛР №2
 
-Статус: первый этап структуры Maven реализован; архитектурные решения
-о выделении пользователей и изменении DELETE остаются предложением.
+Статус: структура Maven, Config Server и Eureka реализованы; архитектурные
+решения о выделении пользователей и изменении DELETE остаются предложением.
 Основа: текущий монолит ЛР №1, ветка `main`, Java 21, Spring Boot 3.5.6,
 Maven, PostgreSQL, JPA, Liquibase, Redis, OpenAPI, JUnit и Testcontainers.
 
@@ -16,7 +16,27 @@ Maven, PostgreSQL, JPA, Liquibase, Redis, OpenAPI, JUnit и Testcontainers.
 - `docker compose config --quiet` и `docker compose build app` проходят.
   Полный Compose-стек на этом этапе не запускался.
 
-Следующий этап — Config Server, Eureka и Gateway для одного бизнес-сервиса.
+Выполнено на втором этапе:
+
+- Добавлены модули `config-server`, `discovery-server` и Spring Cloud BOM 2025.0.3.
+- Config Server читает `config-repository` через native backend. Tracker и
+  Eureka загружают общие и индивидуальные настройки при старте. Bootstrap
+  Config Server остаётся локальным, чтобы исключить зависимость от самого себя.
+- Tracker и Config Server регистрируются в standalone Eureka.
+- В Compose добавлены зависимости по readiness, отдельные образы и параметры
+  портов. Тестовый профиль tracker-service читает те же YAML из test classpath
+  без сетевой зависимости от Config Server и Eureka.
+- `mvn clean verify` на Java 21: 114 unit- и 32 integration-теста проходят;
+  покрытие строк tracker-service — 90.43%. Это не агрегированный отчёт сервисов.
+- `scripts/smoke-config-discovery.sh`: все три образа собраны, конфигурация
+  загружена по HTTP, оба клиента зарегистрированы в Eureka со статусом UP,
+  API трекера и БД доступны. Проверка выполнена в отдельном Compose-проекте;
+  его контейнеры, сеть и volumes удалены после завершения.
+- Проверен отказ runtime-запуска tracker-service при недоступном обязательном
+  Config Server. Автоматическое обновление конфигурации работающих клиентов
+  на этом этапе не включено.
+
+Следующий этап — Gateway для одного бизнес-сервиса и общий Swagger UI.
 
 ## 1. Границы сервисов
 
