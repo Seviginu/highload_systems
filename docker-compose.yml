@@ -1,4 +1,52 @@
 services:
+  user-service:
+    profiles: ["user-service-preview"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_MODULE: user-service
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+      USER_R2DBC_URL: r2dbc:postgresql://users-db:5432/users
+      USER_JDBC_URL: jdbc:postgresql://users-db:5432/users
+      USER_DB_USERNAME: ${USER_DB_USERNAME:-users}
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD:-users}
+      SERVER_PORT: 8080
+    ports:
+      - "${USER_SERVICE_PORT:-8082}:8080"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      users-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q '\"status\":\"UP\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+
+  users-db:
+    profiles: ["user-service-preview"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: users
+      POSTGRES_USER: ${USER_DB_USERNAME:-users}
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD:-users}
+    volumes:
+      - users-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   api-gateway:
     build:
       context: .
@@ -132,5 +180,6 @@ services:
     restart: unless-stopped
 
 volumes:
+  users-data:
   postgres-data:
   redis-data:

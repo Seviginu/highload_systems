@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: user-service
+
+---
+spring:
+  config:
+    activate:
+      on-profile: "!test"
+    import: configserver:${CONFIG_SERVER_URL:http://localhost:8888}

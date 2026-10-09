@@ -149,3 +149,28 @@ UP и существующий HTTP API трекера. Дополнительн
 данных, вложенные маршруты, пагинацию, feed, заголовок Location и ошибки.
 При завершении удаляет только созданные им
 контейнеры, сеть и volumes; текущий рабочий Compose-проект не перезапускается.
+
+## Промежуточный user-service
+
+Новый модуль использует WebFlux, Reactor и PostgreSQL R2DBC. Он читает настройки
+из Config Server, регистрируется в Eureka и имеет отдельный Liquibase changelog.
+Для его проверки отдельно от трекера:
+
+```sh
+JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home mvn -pl user-service -am clean verify
+docker compose --profile user-service-preview up --build user-service
+```
+
+Прямой API: `http://localhost:8082/api/v1/users`; порт задаётся USER_SERVICE_PORT.
+При необходимости переопределить CONFIG_SERVER_PORT и EUREKA_SERVER_PORT,
+чтобы не занимать порты других проектов. OpenAPI: `/v3/api-docs`.
+
+DELETE выполняет логическое удаление: ID и запись сохраняются; публичные чтения
+и внутренние проверки скрывают удалённого пользователя. Его email остаётся
+занятым. Конкурентное обновление старой версии возвращает 409.
+
+Gateway и tracker-service пока используют прежних пользователей монолита.
+Базы независимы; перенос текущих данных ещё не реализован. Не использовать
+preview API как основной источник пользователей до переключения маршрута.
+Подготовленные, но не применённые изменения трекера описаны в
+[proposals/user-service-extraction/README.md](proposals/user-service-extraction/README.md).

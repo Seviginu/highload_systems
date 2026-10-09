@@ -31,6 +31,7 @@
     <modules>
         <module>config-server</module>
         <module>discovery-server</module>
+        <module>user-service</module>
         <module>tracker-service</module>
         <module>api-gateway</module>
     </modules>
