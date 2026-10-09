@@ -32,3 +32,20 @@ server:
 spring.cloud.openfeign.client.config.user-service:
   connectTimeout: 2000
   readTimeout: 3000
+
+spring.cloud.openfeign.circuitbreaker.enabled: true
+# Feign socket timeouts bound the synchronous call on tracker-blocking.
+spring.cloud.circuitbreaker.resilience4j.disable-time-limiter: true
+spring.cloud.circuitbreaker.bulkhead.resilience4j.enabled: false
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      userDirectory:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: ${USER_CIRCUIT_WAIT_DURATION:10s}
+        permittedNumberOfCallsInHalfOpenState: 2
+        automaticTransitionFromOpenToHalfOpenEnabled: false

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cloud.client.circuitbreaker.NoFallbackAvailableException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -45,6 +46,15 @@ class UserDirectoryTest {
                 .thenReturn(List.of(new UserReference(1L, "ADMIN")));
         assertThatThrownBy(() -> new UserDirectory(client).requireUsers(1L, 2L))
                 .isInstanceOf(ResourceNotFoundException.class).hasMessageContaining("'2'");
+    }
+
+    @Test
+    void shouldTranslateCircuitBreakerRejection() {
+        var failure = new NoFallbackAvailableException("No fallback", new IllegalStateException("Circuit open"));
+        when(client.resolve(new ResolveUsersRequest(Set.of(1L)))).thenThrow(failure);
+        assertThatThrownBy(() -> new UserDirectory(client).requireUsers(1L))
+                .isInstanceOf(DependencyUnavailableException.class)
+                .hasMessage("User service is unavailable").hasCause(failure);
     }
 
     @Test

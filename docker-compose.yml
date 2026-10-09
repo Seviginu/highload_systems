@@ -158,6 +158,7 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-vs_lab1}
       DB_USERNAME: ${POSTGRES_USER:-vs_lab1}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-vs_lab1}
+      USER_CIRCUIT_WAIT_DURATION: ${USER_CIRCUIT_WAIT_DURATION:-10s}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       TASK_CACHE_TTL: ${TASK_CACHE_TTL:-10m}

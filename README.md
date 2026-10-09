@@ -12,7 +12,7 @@ Java 21, Spring Boot, Maven, PostgreSQL, Liquibase и Redis.
 Добавлены Config Server, Eureka и Gateway на Spring Cloud 2025.0.3.
 Оба бизнес-сервиса и Gateway работают на WebFlux/Reactor. Tracker сохраняет
 Spring Data JPA и выполняет синхронную бизнес-логику на отдельном scheduler.
-Circuit Breaker остаётся следующим этапом. Общий Swagger UI размещён на Gateway, а tracker-service
+Feign защищён Circuit Breaker на Resilience4j. Общий Swagger UI размещён на Gateway, а tracker-service
 публикует только спецификацию OpenAPI.
 
 ```text
@@ -225,6 +225,33 @@ HTTP-тесты используют WebTestClient; прежние PostgreSQL/Re
 сохранены. BlockingBoundaryIT проверяет реальный сервер с одним HTTP event loop:
 пока Feign ожидает ответа, actuator/info остаётся доступным, а JPA, Feign и Redis
 работают на tracker-blocking. Также проверяются границы локальной транзакции.
+
+## Circuit Breaker для user-service
+
+Spring Cloud OpenFeign оборачивает вызов UserClient в Circuit Breaker
+`userDirectory` на Resilience4j. Настройки находятся в
+`config-repository/tracker-service.yml` и поступают из Config Server.
+
+- `CLOSED`: учитываются последние 10 вызовов; после 10 вызовов доля ошибок
+  от 50% переводит цепь в `OPEN`.
+- `OPEN`: вызовы Feign отклоняются без HTTP-запроса к user-service.
+  API возвращает 503 `User service is unavailable`.
+- Через `USER_CIRCUIT_WAIT_DURATION` (по умолчанию 10 секунд) следующий запрос
+  переводит цепь в `HALF_OPEN`. Разрешены два пробных вызова; оба успешных
+  закрывают цепь, доля ошибок от 50% снова открывает её.
+
+Таймаут соединения Feign — 2 секунды, чтения — 3 секунды. TimeLimiter и
+bulkhead Spring Cloud отключены: синхронный Feign остаётся на tracker-blocking,
+его ожидание ограничивают socket timeouts, а число потоков и очередь — scheduler.
+Повторные попытки и подстановка фиктивных пользователей не добавляются.
+Проверки отсутствующего пользователя и роли выполняются после успешного ответа
+Feign и возвращают 404/409; они не увеличивают счётчик сбоев цепи.
+Удалённая проверка выполняется до локальной транзакции.
+
+UserCircuitBreakerIT проверяет реальные HTTP-вызовы, таймауты, состояния цепи,
+отсутствие HTTP-запросов в OPEN, ответ API 503 без записи проекта/участника,
+восстановление и повторное открытие после неудачных пробных вызовов.
+Механизм интеграции описан в [документации Spring Cloud OpenFeign](https://docs.spring.io/spring-cloud-openfeign/reference/spring-cloud-openfeign.html).
 
 ## Перенос пользователей из ЛР №1
 

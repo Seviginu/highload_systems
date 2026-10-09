@@ -250,12 +250,13 @@ except urllib.error.HTTPError as error:
     assert error.code == 404
 api_request('/internal/users/resolve', 'POST', {'ids': [lead['id']]}, expected=404)
 
-# A real user-service outage must not produce partial writes in the tracker.
+# A failure burst exercises the configured Circuit Breaker through Gateway.
 subprocess.run(compose + ['stop', 'user-service'], check=True)
-error, _ = api_request('/api/v1/projects', 'POST', {
-    'name': 'Rejected', 'code': 'REJECTED', 'status': 'ACTIVE', 'teamLeadId': lead['id']
-}, expected=503)
-assert error['message'] == 'User service is unavailable'
+for _ in range(12):
+    error, _ = api_request('/api/v1/projects', 'POST', {
+        'name': 'Rejected', 'code': 'REJECTED', 'status': 'ACTIVE', 'teamLeadId': lead['id']
+    }, expected=503)
+    assert error['message'] == 'User service is unavailable'
 projects, _ = api_request('/api/v1/projects')
 assert not any(item['code'] == 'REJECTED' for item in projects)
 assert api_request(f'/api/v1/tasks/{task["id"]}')[0]['id'] == task['id']
@@ -285,7 +286,7 @@ api_request('/api/v1/tasks', 'POST', {
     'taskKey': 'SMOKE-2', 'title': 'Rejected deleted author', 'status': 'TODO', 'priority': 'MEDIUM',
     'authorId': lead['id'], 'projectId': recovered['id'], 'labelIds': []
 }, expected=404)
-print('Feign outage/recovery, task move, logical delete and historical references verified')
+print('Feign failure burst/recovery with Circuit Breaker, task move, logical delete and historical references verified')
 
 _, headers = api_request(f'/api/v1/tasks/{task["id"]}', 'DELETE', expected=204)
 api_request(f'/api/v1/tasks/{task["id"]}', expected=404)

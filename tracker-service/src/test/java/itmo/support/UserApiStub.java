@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class UserApiStub {
     private final Map<Long, TestUser> users = new ConcurrentHashMap<>();
     private final AtomicLong sequence = new AtomicLong(1000);
+    private final AtomicLong requests = new AtomicLong();
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpServer server;
     private volatile boolean unavailable;
@@ -36,6 +37,7 @@ public class UserApiStub {
             return thread;
         }));
         server.createContext("/internal/users/resolve", exchange -> {
+            requests.incrementAndGet();
             try {
                 if (!"POST".equals(exchange.getRequestMethod())) {
                     exchange.sendResponseHeaders(405, -1);
@@ -83,6 +85,7 @@ public class UserApiStub {
     }
 
     public String url() { return "http://127.0.0.1:" + server.getAddress().getPort(); }
+    public long requestCount() { return requests.get(); }
     public TestUser create(TestUser user) {
         user.assignId(sequence.incrementAndGet());
         users.put(user.getId(), user);
@@ -96,6 +99,7 @@ public class UserApiStub {
         responseRelease = release;
     }
     public void clear() {
+        requests.set(0);
         users.clear(); unavailable = false; delayMillis = 0;
         responseEntered = null; responseRelease = null;
     }

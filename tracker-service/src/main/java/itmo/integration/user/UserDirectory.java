@@ -5,6 +5,7 @@ import itmo.common.exception.ConflictException;
 import itmo.common.exception.DependencyUnavailableException;
 import itmo.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cloud.client.circuitbreaker.NoFallbackAvailableException;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
@@ -39,7 +40,7 @@ public class UserDirectory {
             for (UserReference user : userClient.resolve(new ResolveUsersRequest(ids))) {
                 users.put(user.id(), user);
             }
-        } catch (FeignException error) {
+        } catch (FeignException | NoFallbackAvailableException error) {
             throw new DependencyUnavailableException("User service is unavailable", error);
         }
         for (Long id : ids) {
