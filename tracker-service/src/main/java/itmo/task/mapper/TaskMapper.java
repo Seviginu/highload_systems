@@ -6,7 +6,6 @@ import itmo.task.dto.CreateTaskRequest;
 import itmo.task.dto.TaskResponse;
 import itmo.task.dto.UpdateTaskRequest;
 import itmo.task.entity.Task;
-import itmo.user.entity.User;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -17,8 +16,8 @@ public class TaskMapper {
 
     public Task toEntity(
             CreateTaskRequest request,
-            User author,
-            User assignee,
+            Long authorId,
+            Long assigneeId,
             Project project,
             Set<Label> labels
     ) {
@@ -28,8 +27,8 @@ public class TaskMapper {
                 normalizeDescription(request.description()),
                 request.status(),
                 request.priority(),
-                author,
-                assignee,
+                authorId,
+                assigneeId,
                 project,
                 labels
         );
@@ -38,8 +37,8 @@ public class TaskMapper {
     public void updateEntity(
             Task task,
             UpdateTaskRequest request,
-            User author,
-            User assignee,
+            Long authorId,
+            Long assigneeId,
             Project project,
             Set<Label> labels
     ) {
@@ -49,8 +48,8 @@ public class TaskMapper {
                 normalizeDescription(request.description()),
                 request.status(),
                 request.priority(),
-                author,
-                assignee,
+                authorId,
+                assigneeId,
                 project,
                 labels
         );
@@ -68,8 +67,8 @@ public class TaskMapper {
                 task.getDescription(),
                 task.getStatus(),
                 task.getPriority(),
-                task.getAuthor().getId(),
-                task.getAssignee() == null ? null : task.getAssignee().getId(),
+                task.getAuthorId(),
+                task.getAssigneeId(),
                 task.getProject().getId(),
                 labelIds,
                 task.getVersion(),

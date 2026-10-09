@@ -18,9 +18,9 @@ import itmo.task.entity.TaskPriority;
 import itmo.task.entity.TaskStatus;
 import itmo.task.mapper.TaskMapper;
 import itmo.task.repository.TaskRepository;
-import itmo.user.entity.User;
-import itmo.user.entity.UserRole;
-import itmo.user.service.UserService;
+import itmo.support.TestUser;
+import itmo.integration.user.UserDirectory;
+import itmo.support.TestTransactions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,14 +57,14 @@ class TaskServiceImplTest {
     private ProjectMemberService projectMemberService;
 
     @Mock
-    private UserService userService;
+    private UserDirectory userDirectory;
 
     @Mock
     private LabelService labelService;
 
     private TaskServiceImpl taskService;
     private Project project;
-    private User author;
+    private TestUser author;
     private Label label;
 
     @BeforeEach
@@ -74,11 +74,12 @@ class TaskServiceImplTest {
                 new TaskMapper(),
                 projectService,
                 projectMemberService,
-                userService,
+                userDirectory,
+                new TestTransactions(),
                 labelService
         );
         project = new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE);
-        author = new User("Author", "author@example.com", UserRole.TEAM_LEAD);
+        author = new TestUser("TEAM_LEAD");
         label = new Label("Backend", "#112233");
         ReflectionTestUtils.setField(project, "id", 1L);
         ReflectionTestUtils.setField(author, "id", 2L);
@@ -184,12 +185,11 @@ class TaskServiceImplTest {
     void shouldMoveTaskWhenAssigneeIsTargetProjectMember() {
         Task task = task();
         Project targetProject = new Project("Mobile", "MOBILE", null, ProjectStatus.ACTIVE);
-        User assignee = new User("Developer", "developer@example.com", UserRole.DEVELOPER);
+        TestUser assignee = new TestUser("DEVELOPER");
         ReflectionTestUtils.setField(targetProject, "id", 4L);
         ReflectionTestUtils.setField(assignee, "id", 5L);
         when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
         when(projectService.requireEntity(4L)).thenReturn(targetProject);
-        when(userService.requireEntity(5L)).thenReturn(assignee);
         when(projectMemberService.isActiveMember(4L, 5L)).thenReturn(true);
         when(labelService.requireEntities(Set.of(3L))).thenReturn(Set.of(label));
         when(taskRepository.saveAndFlush(task)).thenReturn(task);
@@ -205,12 +205,11 @@ class TaskServiceImplTest {
     void shouldRejectMoveWhenAssigneeIsNotTargetProjectMember() {
         Task task = task();
         Project targetProject = new Project("Mobile", "MOBILE", null, ProjectStatus.ACTIVE);
-        User assignee = new User("Developer", "developer@example.com", UserRole.DEVELOPER);
+        TestUser assignee = new TestUser("DEVELOPER");
         ReflectionTestUtils.setField(targetProject, "id", 4L);
         ReflectionTestUtils.setField(assignee, "id", 5L);
         when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
         when(projectService.requireEntity(4L)).thenReturn(targetProject);
-        when(userService.requireEntity(5L)).thenReturn(assignee);
         MoveTaskRequest request = new MoveTaskRequest(4L, 5L, Set.of(3L), 0L);
 
         assertThatThrownBy(() -> taskService.move(10L, request))
@@ -325,7 +324,6 @@ class TaskServiceImplTest {
 
     private void prepareProjectAndAuthor() {
         when(projectService.requireEntity(1L)).thenReturn(project);
-        when(userService.requireEntity(2L)).thenReturn(author);
     }
 
     private void prepareRelations() {
@@ -336,7 +334,7 @@ class TaskServiceImplTest {
     private Task task() {
         Task task = new Task(
                 "PLATFORM-1", "Task", null, TaskStatus.TODO, TaskPriority.HIGH,
-                author, null, project, Set.of(label)
+                author.getId(), null, project, Set.of(label)
         );
         return persisted(task);
     }

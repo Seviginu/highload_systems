@@ -25,3 +25,7 @@ app:
       ttl: ${TASK_CACHE_TTL:10m}
 server:
   port: ${SERVER_PORT:8080}
+
+spring.cloud.openfeign.client.config.user-service:
+  connectTimeout: 2000
+  readTimeout: 3000

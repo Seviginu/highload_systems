@@ -15,9 +15,10 @@ import itmo.task.entity.Task;
 import itmo.task.entity.TaskPriority;
 import itmo.task.entity.TaskStatus;
 import itmo.task.repository.TaskRepository;
-import itmo.user.entity.User;
-import itmo.user.entity.UserRole;
-import itmo.user.repository.UserRepository;
+import itmo.support.TestUser;
+import itmo.support.UserApiStub;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -82,8 +83,13 @@ class TaskIT {
     @Autowired
     private LabelRepository labelRepository;
 
-    @Autowired
-    private UserRepository userRepository;
+    private static final UserApiStub USERS = new UserApiStub();
+
+    @DynamicPropertySource
+    static void userClientProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.cloud.openfeign.client.config.user-service.url", USERS::url);
+        registry.add("spring.cloud.openfeign.client.config.user-service.readTimeout", () -> 200);
+    }
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -104,7 +110,7 @@ class TaskIT {
         projectMemberRepository.deleteAll();
         projectRepository.deleteAll();
         labelRepository.deleteAll();
-        userRepository.deleteAll();
+        USERS.clear();
     }
 
     @Test
@@ -298,11 +304,11 @@ class TaskIT {
         assertThat(matching).isNotNull();
         assertThat(differentState).isNotNull();
 
-        User anotherAuthor = userRepository.saveAndFlush(
-                new User("Another author", "another-author@example.com", UserRole.TEAM_LEAD)
+        TestUser anotherAuthor = USERS.create(
+                new TestUser("TEAM_LEAD")
         );
-        User anotherAssignee = userRepository.saveAndFlush(
-                new User("Another developer", "another-developer@example.com", UserRole.DEVELOPER)
+        TestUser anotherAssignee = USERS.create(
+                new TestUser("DEVELOPER")
         );
         Project anotherProject = projectRepository.saveAndFlush(
                 new Project("Mobile", "MOBILE", null, ProjectStatus.ACTIVE)
@@ -369,8 +375,8 @@ class TaskIT {
 
     @Test
     void shouldRejectMissingRelatedResourceWithoutSavingTask() {
-        User author = userRepository.saveAndFlush(
-                new User("Author", "author@example.com", UserRole.TEAM_LEAD)
+        TestUser author = USERS.create(
+                new TestUser("TEAM_LEAD")
         );
         var response = restTemplate.postForEntity(
                 "/api/v1/tasks",
@@ -440,7 +446,7 @@ class TaskIT {
                 new Project("Analytics", "ANALYTICS", null, ProjectStatus.ACTIVE)
         );
         Label targetLabel = labelRepository.saveAndFlush(new Label("Mobile", "#445566"));
-        projectMemberRepository.saveAndFlush(new ProjectMember(targetProject, data.assignee()));
+        projectMemberRepository.saveAndFlush(new ProjectMember(targetProject, data.assignee().getId()));
         TaskResponse created = restTemplate.postForEntity(
                 "/api/v1/tasks",
                 createRequest(data, "PLATFORM-1"),
@@ -487,7 +493,7 @@ class TaskIT {
         assertThat(rejectedResponse.getBody()).contains("not an active member");
         Task persisted = taskRepository.findById(created.id()).orElseThrow();
         assertThat(persisted.getProject().getId()).isEqualTo(targetProject.getId());
-        assertThat(persisted.getAssignee().getId()).isEqualTo(data.assignee().getId());
+        assertThat(persisted.getAssigneeId()).isEqualTo(data.assignee().getId());
         assertThat(persisted.getLabels()).extracting(Label::getId).containsExactly(targetLabel.getId());
         assertThat(persisted.getVersion()).isEqualTo(moved.version());
     }
@@ -539,7 +545,7 @@ class TaskIT {
                 null,
                 null,
                 null,
-                data.author(),
+                data.author().getId(),
                 null,
                 data.project(),
                 Set.of()
@@ -568,7 +574,6 @@ class TaskIT {
         assertThat(openApi.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(openApi.getBody())
                 .contains("\"servers\":[{\"url\":\"/\"}]")
-                .contains("/api/v1/users")
                 .contains("/api/v1/projects")
                 .contains("/api/v1/projects/{projectId}/members")
                 .contains("/api/v1/labels")
@@ -577,7 +582,6 @@ class TaskIT {
                 .contains("/api/v1/tasks/{id}/move")
                 .contains("X-Total-Count")
                 .contains("X-Next-Cursor")
-                .contains("UserResponse")
                 .contains("ProjectResponse")
                 .contains("ProjectMemberResponse")
                 .contains("LabelResponse")
@@ -585,12 +589,48 @@ class TaskIT {
                 .contains("ApiError");
     }
 
+    @Test
+    void shouldKeepHistoricalReferencesAndAllowEditingAfterUsersAreDeleted() {
+        TestData data = createTestData();
+        TaskResponse created = restTemplate.postForEntity("/api/v1/tasks", createRequest(data, "PLATFORM-1"),
+                TaskResponse.class).getBody();
+        assertThat(created).isNotNull();
+        USERS.delete(data.author().getId());
+        USERS.delete(data.assignee().getId());
+        taskCache().clear();
+        var read = restTemplate.getForEntity("/api/v1/tasks/{id}", TaskResponse.class, created.id());
+        assertThat(read.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(read.getBody().authorId()).isEqualTo(data.author().getId());
+        assertThat(read.getBody().assigneeId()).isEqualTo(data.assignee().getId());
+        var update = restTemplate.exchange("/api/v1/tasks/{id}", HttpMethod.PUT,
+                new HttpEntity<>(new UpdateTaskRequest(created.taskKey(), "Edited history", created.description(),
+                        created.status(), created.priority(), created.authorId(), created.assigneeId(), created.projectId(),
+                        Set.copyOf(created.labelIds()), created.version())), TaskResponse.class, created.id());
+        assertThat(update.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(update.getBody().title()).isEqualTo("Edited history");
+        assertThat(update.getBody().authorId()).isEqualTo(data.author().getId());
+        assertThat(update.getBody().assigneeId()).isEqualTo(data.assignee().getId());
+        var rejected = restTemplate.postForEntity("/api/v1/tasks", createRequest(data, "PLATFORM-2"), String.class);
+        assertThat(rejected.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(taskRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldNotWriteTaskWhenUserServiceIsUnavailable() {
+        TestData data = createTestData();
+        USERS.unavailable(true);
+        var response = restTemplate.postForEntity("/api/v1/tasks", createRequest(data, "PLATFORM-1"), String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(taskRepository.count()).isZero();
+        assertThat(restTemplate.getForEntity("/api/v1/tasks", String.class).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
     private TestData createTestData() {
-        User author = userRepository.saveAndFlush(
-                new User("Author", "author@example.com", UserRole.TEAM_LEAD)
+        TestUser author = USERS.create(
+                new TestUser("TEAM_LEAD")
         );
-        User assignee = userRepository.saveAndFlush(
-                new User("Developer", "developer@example.com", UserRole.DEVELOPER)
+        TestUser assignee = USERS.create(
+                new TestUser("DEVELOPER")
         );
         Project project = projectRepository.saveAndFlush(
                 new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE)
@@ -617,6 +657,6 @@ class TaskIT {
         return Objects.requireNonNull(cacheManager.getCache("tasks"));
     }
 
-    private record TestData(User author, User assignee, Project project, Label label) {
+    private record TestData(TestUser author, TestUser assignee, Project project, Label label) {
     }
 }

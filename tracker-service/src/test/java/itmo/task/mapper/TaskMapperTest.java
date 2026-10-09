@@ -8,8 +8,7 @@ import itmo.task.dto.UpdateTaskRequest;
 import itmo.task.entity.Task;
 import itmo.task.entity.TaskPriority;
 import itmo.task.entity.TaskStatus;
-import itmo.user.entity.User;
-import itmo.user.entity.UserRole;
+import itmo.support.TestUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -22,15 +21,15 @@ class TaskMapperTest {
 
     private final TaskMapper mapper = new TaskMapper();
     private Project project;
-    private User author;
-    private User assignee;
+    private TestUser author;
+    private TestUser assignee;
     private Label backend;
 
     @BeforeEach
     void setUp() {
         project = new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE);
-        author = new User("Author", "author@example.com", UserRole.TEAM_LEAD);
-        assignee = new User("Developer", "dev@example.com", UserRole.DEVELOPER);
+        author = new TestUser("TEAM_LEAD");
+        assignee = new TestUser("DEVELOPER");
         backend = new Label("Backend", "#112233");
         ReflectionTestUtils.setField(project, "id", 1L);
         ReflectionTestUtils.setField(author, "id", 2L);
@@ -52,8 +51,8 @@ class TaskMapperTest {
                         1L,
                         Set.of(4L)
                 ),
-                author,
-                assignee,
+                author.getId(),
+                assignee.getId(),
                 project,
                 Set.of(backend)
         );
@@ -80,8 +79,8 @@ class TaskMapperTest {
                         "PLATFORM-1", "Old", null, TaskStatus.TODO, TaskPriority.LOW,
                         2L, 3L, 1L, Set.of(4L)
                 ),
-                author,
-                assignee,
+                author.getId(),
+                assignee.getId(),
                 project,
                 Set.of(backend)
         );
@@ -96,7 +95,7 @@ class TaskMapperTest {
                         "core-2", " New ", " ", TaskStatus.IN_PROGRESS, TaskPriority.CRITICAL,
                         2L, null, 6L, Set.of(7L), 0L
                 ),
-                author,
+                author.getId(),
                 null,
                 anotherProject,
                 Set.of(api)
@@ -104,7 +103,7 @@ class TaskMapperTest {
 
         assertThat(task.getTaskKey()).isEqualTo("CORE-2");
         assertThat(task.getDescription()).isNull();
-        assertThat(task.getAssignee()).isNull();
+        assertThat(task.getAssigneeId()).isNull();
         assertThat(task.getProject()).isSameAs(anotherProject);
         assertThat(task.getLabels()).containsExactly(api);
         assertThat(project.getTasks()).doesNotContain(task);

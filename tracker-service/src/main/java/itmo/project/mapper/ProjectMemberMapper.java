@@ -11,7 +11,7 @@ public class ProjectMemberMapper {
         return new ProjectMemberResponse(
                 member.getId(),
                 member.getProject().getId(),
-                member.getUser().getId(),
+                member.getUserId(),
                 member.getJoinedAt(),
                 member.isActive()
         );

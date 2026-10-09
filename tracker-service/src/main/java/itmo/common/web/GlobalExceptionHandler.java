@@ -1,6 +1,7 @@
 package itmo.common.web;
 
 import itmo.common.exception.ConflictException;
+import itmo.common.exception.DependencyUnavailableException;
 import itmo.common.exception.ResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -17,6 +18,11 @@ import java.util.List;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(DependencyUnavailableException.class)
+    public ResponseEntity<ApiError> handleDependencyUnavailable(DependencyUnavailableException error, HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, error.getMessage(), request, List.of());
+    }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(

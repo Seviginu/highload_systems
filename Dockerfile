@@ -3,20 +3,12 @@ WORKDIR /workspace
 ARG SERVICE_MODULE=tracker-service
 
 COPY pom.xml .
-COPY tracker-service/pom.xml ./tracker-service/pom.xml
-COPY user-service/pom.xml ./user-service/pom.xml
-COPY config-server/pom.xml ./config-server/pom.xml
-COPY discovery-server/pom.xml ./discovery-server/pom.xml
-COPY api-gateway/pom.xml ./api-gateway/pom.xml
-RUN mvn -B -pl ${SERVICE_MODULE} -am -DskipTests dependency:go-offline
+COPY ${SERVICE_MODULE}/pom.xml ./${SERVICE_MODULE}/pom.xml
 
-COPY tracker-service/src ./tracker-service/src
-COPY user-service/src ./user-service/src
-COPY config-server/src ./config-server/src
-COPY discovery-server/src ./discovery-server/src
-COPY api-gateway/src ./api-gateway/src
+COPY ${SERVICE_MODULE}/src ./${SERVICE_MODULE}/src
 COPY config-repository ./config-repository
-RUN mvn -B -pl ${SERVICE_MODULE} -am -DskipTests package
+RUN --mount=type=cache,target=/root/.m2,sharing=locked \
+    mvn -B -f ${SERVICE_MODULE}/pom.xml -DskipTests package
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app

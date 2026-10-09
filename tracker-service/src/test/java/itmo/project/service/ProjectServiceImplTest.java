@@ -3,6 +3,8 @@ package itmo.project.service;
 import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
 import itmo.project.dto.CreateProjectRequest;
+import itmo.integration.user.UserDirectory;
+import itmo.support.TestTransactions;
 import itmo.project.dto.ProjectResponse;
 import itmo.project.dto.UpdateProjectRequest;
 import itmo.project.entity.Project;
@@ -38,11 +40,14 @@ class ProjectServiceImplTest {
     @Mock
     private ProjectMemberService projectMemberService;
 
+    @Mock
+    private UserDirectory userDirectory;
+
     private ProjectServiceImpl projectService;
 
     @BeforeEach
     void setUp() {
-        projectService = new ProjectServiceImpl(projectRepository, new ProjectMapper(), projectMemberService);
+        projectService = new ProjectServiceImpl(projectRepository, new ProjectMapper(), projectMemberService, userDirectory, new TestTransactions());
     }
 
     @Test
@@ -56,7 +61,7 @@ class ProjectServiceImplTest {
         assertThat(response.name()).isEqualTo("Platform");
         assertThat(response.code()).isEqualTo("PLATFORM");
         verify(projectRepository).saveAndFlush(any(Project.class));
-        verify(projectMemberService).assignTeamLead(null, 1L);
+        verify(projectMemberService).assignValidatedTeamLead(null, 1L);
     }
 
     @Test

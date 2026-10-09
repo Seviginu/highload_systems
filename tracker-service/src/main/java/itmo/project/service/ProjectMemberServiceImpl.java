@@ -9,9 +9,8 @@ import itmo.project.entity.ProjectMember;
 import itmo.project.mapper.ProjectMemberMapper;
 import itmo.project.repository.ProjectMemberRepository;
 import itmo.project.repository.ProjectRepository;
-import itmo.user.entity.User;
-import itmo.user.entity.UserRole;
-import itmo.user.service.UserService;
+import itmo.integration.user.UserDirectory;
+import org.springframework.transaction.support.TransactionOperations;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -27,19 +26,20 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
 
     private final ProjectMemberRepository memberRepository;
     private final ProjectRepository projectRepository;
-    private final UserService userService;
+    private final UserDirectory userDirectory;
+    private final TransactionOperations transactions;
     private final ProjectMemberMapper memberMapper;
 
     @Override
-    @Transactional
     public ProjectMemberResponse add(Long projectId, AddProjectMemberRequest request) {
-        return addMember(projectId, request.userId(), false);
+        userDirectory.requireUsers(request.userId());
+        return transactions.execute(status -> addMember(projectId, request.userId()));
     }
 
     @Override
     @Transactional
-    public ProjectMemberResponse assignTeamLead(Long projectId, Long userId) {
-        return addMember(projectId, userId, true);
+    public ProjectMemberResponse assignValidatedTeamLead(Long projectId, Long userId) {
+        return addMember(projectId, userId);
     }
 
     @Override
@@ -65,15 +65,9 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         memberRepository.saveAndFlush(member);
     }
 
-    private ProjectMemberResponse addMember(Long projectId, Long userId, boolean teamLeadRequired) {
+    private ProjectMemberResponse addMember(Long projectId, Long userId) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", projectId));
-        User user = userService.requireEntity(userId);
-
-        if (teamLeadRequired && user.getRole() != UserRole.TEAM_LEAD) {
-            throw new ConflictException("User with id '%d' is not a team lead".formatted(userId));
-        }
-
         var existingMember = memberRepository.findByProjectIdAndUserId(projectId, userId);
         if (existingMember.isPresent()) {
             ProjectMember member = existingMember.get();
@@ -85,7 +79,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         }
 
         try {
-            return memberMapper.toResponse(memberRepository.saveAndFlush(new ProjectMember(project, user)));
+            return memberMapper.toResponse(memberRepository.saveAndFlush(new ProjectMember(project, userId)));
         } catch (DataIntegrityViolationException exception) {
             if (isViolationOf(exception, "uq_project_members_project_user")) {
                 throw memberConflict(projectId, userId);

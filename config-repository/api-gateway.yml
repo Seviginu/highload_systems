@@ -9,10 +9,20 @@ spring:
           default-filters:
             - PreserveHostHeader
           routes:
+            - id: users-api
+              uri: lb://user-service
+              predicates:
+                - Path=/api/v1/users/**
             - id: tracker-api
               uri: lb://tracker-service
               predicates:
-                - Path=/api/v1/users/**,/api/v1/projects/**,/api/v1/tasks/**,/api/v1/labels/**
+                - Path=/api/v1/projects/**,/api/v1/tasks/**,/api/v1/labels/**
+            - id: users-openapi
+              uri: lb://user-service
+              predicates:
+                - Path=/v3/api-docs/user-service
+              filters:
+                - SetPath=/v3/api-docs
             - id: tracker-openapi
               uri: lb://tracker-service
               predicates:
@@ -24,5 +34,7 @@ springdoc:
   swagger-ui:
     disable-swagger-default-url: true
     urls:
+      - name: user-service
+        url: /v3/api-docs/user-service
       - name: tracker-service
         url: /v3/api-docs/tracker-service

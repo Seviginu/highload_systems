@@ -21,17 +21,17 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     boolean existsByTaskKeyAndIdNot(String taskKey, Long id);
 
     @Override
-    @EntityGraph(attributePaths = {"author", "assignee", "project", "labels"})
+    @EntityGraph(attributePaths = {"project", "labels"})
     Optional<Task> findById(Long id);
 
-    @EntityGraph(attributePaths = {"author", "assignee", "project"})
+    @EntityGraph(attributePaths = {"project"})
     @Query(
             value = """
                     select task
                     from Task task
                     where (:projectId is null or task.project.id = :projectId)
-                      and (:authorId is null or task.author.id = :authorId)
-                      and (:assigneeId is null or task.assignee.id = :assigneeId)
+                      and (:authorId is null or task.authorId = :authorId)
+                      and (:assigneeId is null or task.assigneeId = :assigneeId)
                       and (:status is null or task.status = :status)
                       and (:priority is null or task.priority = :priority)
                       and (:labelId is null or exists (
@@ -44,8 +44,8 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
                     select count(task)
                     from Task task
                     where (:projectId is null or task.project.id = :projectId)
-                      and (:authorId is null or task.author.id = :authorId)
-                      and (:assigneeId is null or task.assignee.id = :assigneeId)
+                      and (:authorId is null or task.authorId = :authorId)
+                      and (:assigneeId is null or task.assigneeId = :assigneeId)
                       and (:status is null or task.status = :status)
                       and (:priority is null or task.priority = :priority)
                       and (:labelId is null or exists (
@@ -65,9 +65,9 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"author", "assignee", "project"})
+    @EntityGraph(attributePaths = {"project"})
     Slice<Task> findAllByOrderByIdAsc(Pageable pageable);
 
-    @EntityGraph(attributePaths = {"author", "assignee", "project"})
+    @EntityGraph(attributePaths = {"project"})
     Slice<Task> findByIdGreaterThanOrderByIdAsc(Long afterId, Pageable pageable);
 }

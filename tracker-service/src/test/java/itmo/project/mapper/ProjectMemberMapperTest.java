@@ -3,8 +3,7 @@ package itmo.project.mapper;
 import itmo.project.entity.Project;
 import itmo.project.entity.ProjectMember;
 import itmo.project.entity.ProjectStatus;
-import itmo.user.entity.User;
-import itmo.user.entity.UserRole;
+import itmo.support.TestUser;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -19,11 +18,11 @@ class ProjectMemberMapperTest {
     @Test
     void shouldMapProjectMember() {
         Project project = new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE);
-        User user = new User("Alice", "alice@example.com", UserRole.DEVELOPER);
-        ProjectMember member = new ProjectMember(project, user);
+        TestUser user = new TestUser("DEVELOPER");
         Instant joinedAt = Instant.parse("2026-09-25T00:00:00Z");
         ReflectionTestUtils.setField(project, "id", 10L);
         ReflectionTestUtils.setField(user, "id", 20L);
+        ProjectMember member = new ProjectMember(project, user.getId());
         ReflectionTestUtils.setField(member, "id", 30L);
         ReflectionTestUtils.setField(member, "joinedAt", joinedAt);
 

@@ -9,6 +9,8 @@ import itmo.project.entity.Project;
 import itmo.project.mapper.ProjectMapper;
 import itmo.project.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
+import itmo.integration.user.UserDirectory;
+import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -24,23 +26,27 @@ public class ProjectServiceImpl implements ProjectService {
     private final ProjectRepository projectRepository;
     private final ProjectMapper projectMapper;
     private final ProjectMemberService projectMemberService;
+    private final UserDirectory userDirectory;
+    private final TransactionOperations transactions;
 
     @Override
-    @Transactional
     public ProjectResponse create(CreateProjectRequest request) {
-        String normalizedCode = projectMapper.normalizeCode(request.code());
-        ensureCodeAvailable(normalizedCode);
+        userDirectory.requireTeamLead(request.teamLeadId());
+        return transactions.execute(transactionStatus -> {
+            String normalizedCode = projectMapper.normalizeCode(request.code());
+            ensureCodeAvailable(normalizedCode);
 
-        try {
-            Project project = projectRepository.saveAndFlush(projectMapper.toEntity(request));
-            projectMemberService.assignTeamLead(project.getId(), request.teamLeadId());
-            return projectMapper.toResponse(project);
-        } catch (DataIntegrityViolationException exception) {
-            if (isViolationOf(exception, "uq_projects_code")) {
-                throw codeConflict(normalizedCode);
+            try {
+                Project project = projectRepository.saveAndFlush(projectMapper.toEntity(request));
+                projectMemberService.assignValidatedTeamLead(project.getId(), request.teamLeadId());
+                return projectMapper.toResponse(project);
+            } catch (DataIntegrityViolationException exception) {
+                if (isViolationOf(exception, "uq_projects_code")) {
+                    throw codeConflict(normalizedCode);
+                }
+                throw exception;
             }
-            throw exception;
-        }
+        });
     }
 
     @Override

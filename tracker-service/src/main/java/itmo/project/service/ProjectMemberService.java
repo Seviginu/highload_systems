@@ -10,7 +10,7 @@ public interface ProjectMemberService {
     ProjectMemberResponse add(Long projectId, AddProjectMemberRequest request);
 
     @SuppressWarnings("UnusedReturnValue")
-    ProjectMemberResponse assignTeamLead(Long projectId, Long userId);
+    ProjectMemberResponse assignValidatedTeamLead(Long projectId, Long userId);
 
     Page<ProjectMemberResponse> findAll(Long projectId, Pageable pageable);
 

@@ -16,8 +16,8 @@ import itmo.task.dto.UpdateTaskRequest;
 import itmo.task.entity.Task;
 import itmo.task.mapper.TaskMapper;
 import itmo.task.repository.TaskRepository;
-import itmo.user.entity.User;
-import itmo.user.service.UserService;
+import itmo.integration.user.UserDirectory;
+import org.springframework.transaction.support.TransactionOperations;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
@@ -45,30 +45,34 @@ public class TaskServiceImpl implements TaskService {
     private final TaskMapper taskMapper;
     private final ProjectService projectService;
     private final ProjectMemberService projectMemberService;
-    private final UserService userService;
+    private final UserDirectory userDirectory;
+    private final TransactionOperations transactions;
     private final LabelService labelService;
 
     @Override
-    @Transactional
     @CachePut(cacheNames = TASKS_CACHE, key = "#result.id()")
     public TaskResponse create(CreateTaskRequest request) {
-        String normalizedKey = taskMapper.normalizeTaskKey(request.taskKey());
-        ensureTaskKeyAvailable(normalizedKey);
+        userDirectory.requireUsers(request.authorId(), request.assigneeId());
+        return transactions.execute(transactionStatus -> {
+            String normalizedKey = taskMapper.normalizeTaskKey(request.taskKey());
+            ensureTaskKeyAvailable(normalizedKey);
 
-        Project project = resolveProject(request.projectId());
-        User author = resolveUser(request.authorId());
-        User assignee = resolveOptionalUser(request.assigneeId());
-        Set<Label> labels = resolveLabels(request.labelIds());
+            Project project = resolveProject(request.projectId());
+            Long author = request.authorId();
+            Long assignee = request.assigneeId();
+            Set<Label> labels = resolveLabels(request.labelIds());
 
-        try {
-            Task task = taskMapper.toEntity(request, author, assignee, project, labels);
-            return taskMapper.toResponse(taskRepository.saveAndFlush(task));
-        } catch (DataIntegrityViolationException exception) {
-            if (isViolationOf(exception, "uq_tasks_task_key")) {
-                throw taskKeyConflict(normalizedKey);
+            try {
+                Task task = taskMapper.toEntity(request, author, assignee, project, labels);
+                return taskMapper.toResponse(taskRepository.saveAndFlush(task));
+            } catch (DataIntegrityViolationException exception) {
+                if (isViolationOf(exception, "uq_tasks_task_key")) {
+                    throw taskKeyConflict(normalizedKey);
+                }
+                throw exception;
             }
-            throw exception;
-        }
+
+        });
     }
 
     @Override
@@ -109,64 +113,76 @@ public class TaskServiceImpl implements TaskService {
     }
 
     @Override
-    @Transactional
     @CachePut(cacheNames = TASKS_CACHE, key = "#id")
     public TaskResponse move(Long id, MoveTaskRequest request) {
-        Task task = findEntity(id);
-        if (!Objects.equals(task.getVersion(), request.version())) {
-            throw versionConflict(id);
-        }
-        Project project = resolveProject(request.projectId());
-        User assignee = resolveOptionalUser(request.assigneeId());
-        if (assignee != null && !projectMemberService.isActiveMember(request.projectId(), request.assigneeId())) {
-            throw new ConflictException(
-                    "User with id '%d' is not an active member of project '%d'"
-                            .formatted(request.assigneeId(), request.projectId())
-            );
-        }
-        Set<Label> labels = resolveLabels(request.labelIds());
-        task.move(project, assignee, labels);
+        userDirectory.requireUsers(request.assigneeId());
+        return transactions.execute(transactionStatus -> {
+            Task task = findEntity(id);
+            if (!Objects.equals(task.getVersion(), request.version())) {
+                throw versionConflict(id);
+            }
+            Project project = resolveProject(request.projectId());
+            Long assignee = request.assigneeId();
+            if (assignee != null && !projectMemberService.isActiveMember(request.projectId(), request.assigneeId())) {
+                throw new ConflictException(
+                        "User with id '%d' is not an active member of project '%d'"
+                                .formatted(request.assigneeId(), request.projectId())
+                );
+            }
+            Set<Label> labels = resolveLabels(request.labelIds());
+            task.move(project, assignee, labels);
 
-        try {
-            return taskMapper.toResponse(taskRepository.saveAndFlush(task));
-        } catch (OptimisticLockingFailureException exception) {
-            throw versionConflict(id);
-        }
+            try {
+                return taskMapper.toResponse(taskRepository.saveAndFlush(task));
+            } catch (OptimisticLockingFailureException exception) {
+                throw versionConflict(id);
+            }
+
+        });
     }
 
     @Override
-    @Transactional
     @CachePut(cacheNames = TASKS_CACHE, key = "#id")
     public TaskResponse update(Long id, UpdateTaskRequest request) {
-        Task task = findEntity(id);
-        if (!Objects.equals(task.getVersion(), request.version())) {
+        TaskResponse current = transactions.execute(status -> taskMapper.toResponse(findEntity(id)));
+        if (!Objects.equals(current.version(), request.version())) {
             throw versionConflict(id);
         }
-        if (!Objects.equals(task.getProject().getId(), request.projectId())) {
-            throw new ConflictException("Use the task move operation to change a task project");
-        }
+        userDirectory.requireUsers(
+                Objects.equals(current.authorId(), request.authorId()) ? null : request.authorId(),
+                Objects.equals(current.assigneeId(), request.assigneeId()) ? null : request.assigneeId());
+        return transactions.execute(transactionStatus -> {
+            Task task = findEntity(id);
+            if (!Objects.equals(task.getVersion(), request.version())) {
+                throw versionConflict(id);
+            }
+            if (!Objects.equals(task.getProject().getId(), request.projectId())) {
+                throw new ConflictException("Use the task move operation to change a task project");
+            }
 
-        String normalizedKey = taskMapper.normalizeTaskKey(request.taskKey());
-        if (taskRepository.existsByTaskKeyAndIdNot(normalizedKey, id)) {
-            throw taskKeyConflict(normalizedKey);
-        }
-
-        Project project = resolveProject(request.projectId());
-        User author = resolveUser(request.authorId());
-        User assignee = resolveOptionalUser(request.assigneeId());
-        Set<Label> labels = resolveLabels(request.labelIds());
-        taskMapper.updateEntity(task, request, author, assignee, project, labels);
-
-        try {
-            return taskMapper.toResponse(taskRepository.saveAndFlush(task));
-        } catch (OptimisticLockingFailureException exception) {
-            throw versionConflict(id);
-        } catch (DataIntegrityViolationException exception) {
-            if (isViolationOf(exception, "uq_tasks_task_key")) {
+            String normalizedKey = taskMapper.normalizeTaskKey(request.taskKey());
+            if (taskRepository.existsByTaskKeyAndIdNot(normalizedKey, id)) {
                 throw taskKeyConflict(normalizedKey);
             }
-            throw exception;
-        }
+
+            Project project = resolveProject(request.projectId());
+            Long author = request.authorId();
+            Long assignee = request.assigneeId();
+            Set<Label> labels = resolveLabels(request.labelIds());
+            taskMapper.updateEntity(task, request, author, assignee, project, labels);
+
+            try {
+                return taskMapper.toResponse(taskRepository.saveAndFlush(task));
+            } catch (OptimisticLockingFailureException exception) {
+                throw versionConflict(id);
+            } catch (DataIntegrityViolationException exception) {
+                if (isViolationOf(exception, "uq_tasks_task_key")) {
+                    throw taskKeyConflict(normalizedKey);
+                }
+                throw exception;
+            }
+
+        });
     }
 
     @Override
@@ -185,14 +201,6 @@ public class TaskServiceImpl implements TaskService {
 
     private Project resolveProject(Long projectId) {
         return projectService.requireEntity(projectId);
-    }
-
-    private User resolveUser(Long userId) {
-        return userService.requireEntity(userId);
-    }
-
-    private User resolveOptionalUser(Long userId) {
-        return userId == null ? null : resolveUser(userId);
     }
 
     private Set<Label> resolveLabels(Set<Long> labelIds) {

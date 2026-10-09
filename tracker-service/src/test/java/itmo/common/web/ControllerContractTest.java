@@ -4,7 +4,6 @@ import itmo.label.controller.LabelController;
 import itmo.project.controller.ProjectController;
 import itmo.project.controller.ProjectMemberController;
 import itmo.task.controller.TaskController;
-import itmo.user.controller.UserController;
 import jakarta.validation.constraints.Max;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
@@ -20,7 +19,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ControllerContractTest {
 
     private static final List<Class<?>> CONTROLLERS = List.of(
-            UserController.class,
             ProjectController.class,
             ProjectMemberController.class,
             LabelController.class,

@@ -138,8 +138,17 @@ class UserIT {
     @Test
     void shouldValidateEntityWithoutControllerAndEnforceDatabaseUniqueness() {
         StepVerifier.create(users.save(new User("", "not-an-email", null)))
-                .expectError(ConstraintViolationException.class).verify();
+                .expectErrorSatisfies(error -> {
+                    assertThat(error).isInstanceOf(ConstraintViolationException.class);
+                    assertThat(((ConstraintViolationException) error).getConstraintViolations())
+                            .extracting(violation -> violation.getPropertyPath().toString())
+                            .containsExactlyInAnyOrder("name", "email", "role");
+                }).verify();
         create("First", "first@example.com", UserRole.DEVELOPER);
+        client.post().uri("/api/v1/users")
+                .bodyValue(new CreateUserRequest("Duplicate", "FIRST@EXAMPLE.COM", UserRole.ADMIN))
+                .exchange().expectStatus().isEqualTo(409);
+        assertThat(users.count().block()).isEqualTo(1);
         StepVerifier.create(users.save(new User("Duplicate", "FIRST@example.com", UserRole.ADMIN)))
                 .expectError(DataIntegrityViolationException.class).verify();
     }

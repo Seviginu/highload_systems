@@ -2,7 +2,6 @@ package itmo.task.entity;
 
 import itmo.label.entity.Label;
 import itmo.project.entity.Project;
-import itmo.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -67,13 +66,11 @@ public class Task {
     private TaskPriority priority;
 
     @NotNull(message = "Author is required")
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "author_id", nullable = false)
-    private User author;
+    @Column(name = "author_id", nullable = false)
+    private Long authorId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "assignee_id")
-    private User assignee;
+    @Column(name = "assignee_id")
+    private Long assigneeId;
 
     @NotNull(message = "Project is required")
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -115,8 +112,8 @@ public class Task {
             String description,
             TaskStatus status,
             TaskPriority priority,
-            User author,
-            User assignee,
+            Long authorId,
+            Long assigneeId,
             Project project,
             Set<Label> labels
     ) {
@@ -125,8 +122,8 @@ public class Task {
         this.description = description;
         this.status = status;
         this.priority = priority;
-        this.author = author;
-        this.assignee = assignee;
+        this.authorId = authorId;
+        this.assigneeId = assigneeId;
         this.project = project;
         project.addTask(this);
         replaceLabels(labels);
@@ -139,8 +136,8 @@ public class Task {
             String description,
             TaskStatus status,
             TaskPriority priority,
-            User author,
-            User assignee,
+            Long authorId,
+            Long assigneeId,
             Project project,
             Set<Label> labels
     ) {
@@ -149,8 +146,8 @@ public class Task {
         this.description = description;
         this.status = status;
         this.priority = priority;
-        this.author = author;
-        this.assignee = assignee;
+        this.authorId = authorId;
+        this.assigneeId = assigneeId;
         if (this.project != project) {
             this.project.removeTask(this);
             this.project = project;
@@ -159,13 +156,13 @@ public class Task {
         replaceLabels(labels);
     }
 
-    public void move(Project project, User assignee, Set<Label> labels) {
+    public void move(Project project, Long assigneeId, Set<Label> labels) {
         if (this.project != project) {
             this.project.removeTask(this);
             this.project = project;
             project.addTask(this);
         }
-        this.assignee = assignee;
+        this.assigneeId = assigneeId;
         replaceLabels(labels);
     }
 

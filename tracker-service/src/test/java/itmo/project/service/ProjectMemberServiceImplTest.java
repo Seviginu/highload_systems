@@ -10,9 +10,9 @@ import itmo.project.entity.ProjectStatus;
 import itmo.project.mapper.ProjectMemberMapper;
 import itmo.project.repository.ProjectMemberRepository;
 import itmo.project.repository.ProjectRepository;
-import itmo.user.entity.User;
-import itmo.user.entity.UserRole;
-import itmo.user.service.UserService;
+import itmo.support.TestUser;
+import itmo.integration.user.UserDirectory;
+import itmo.support.TestTransactions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,22 +42,23 @@ class ProjectMemberServiceImplTest {
     private ProjectRepository projectRepository;
 
     @Mock
-    private UserService userService;
+    private UserDirectory userDirectory;
 
     private ProjectMemberServiceImpl memberService;
     private Project project;
-    private User user;
+    private TestUser user;
 
     @BeforeEach
     void setUp() {
         memberService = new ProjectMemberServiceImpl(
                 memberRepository,
                 projectRepository,
-                userService,
+                userDirectory,
+                new TestTransactions(),
                 new ProjectMemberMapper()
         );
         project = new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE);
-        user = new User("Alice", "alice@example.com", UserRole.DEVELOPER);
+        user = new TestUser("DEVELOPER");
         ReflectionTestUtils.setField(project, "id", 1L);
         ReflectionTestUtils.setField(user, "id", 2L);
     }
@@ -65,7 +66,6 @@ class ProjectMemberServiceImplTest {
     @Test
     void shouldAddMember() {
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-        when(userService.requireEntity(2L)).thenReturn(user);
         when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.empty());
         when(memberRepository.saveAndFlush(any(ProjectMember.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -79,9 +79,8 @@ class ProjectMemberServiceImplTest {
 
     @Test
     void shouldRejectActiveDuplicate() {
-        ProjectMember existing = new ProjectMember(project, user);
+        ProjectMember existing = new ProjectMember(project, user.getId());
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-        when(userService.requireEntity(2L)).thenReturn(user);
         when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.of(existing));
         AddProjectMemberRequest request = new AddProjectMemberRequest(2L);
 
@@ -93,10 +92,9 @@ class ProjectMemberServiceImplTest {
 
     @Test
     void shouldReactivateInactiveMember() {
-        ProjectMember existing = new ProjectMember(project, user);
+        ProjectMember existing = new ProjectMember(project, user.getId());
         existing.deactivate();
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-        when(userService.requireEntity(2L)).thenReturn(user);
         when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.of(existing));
         when(memberRepository.saveAndFlush(existing)).thenReturn(existing);
 
@@ -106,19 +104,8 @@ class ProjectMemberServiceImplTest {
     }
 
     @Test
-    void shouldRequireTeamLeadRoleForProjectCreation() {
-        when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-        when(userService.requireEntity(2L)).thenReturn(user);
-
-        assertThatThrownBy(() -> memberService.assignTeamLead(1L, 2L))
-                .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("not a team lead");
-        verify(memberRepository, never()).saveAndFlush(any(ProjectMember.class));
-    }
-
-    @Test
     void shouldReturnMemberPage() {
-        ProjectMember member = new ProjectMember(project, user);
+        ProjectMember member = new ProjectMember(project, user.getId());
         PageRequest pageable = PageRequest.of(0, 20);
         when(projectRepository.existsById(1L)).thenReturn(true);
         when(memberRepository.findAllByProjectId(1L, pageable))
@@ -139,7 +126,7 @@ class ProjectMemberServiceImplTest {
 
     @Test
     void shouldDeactivateMember() {
-        ProjectMember member = new ProjectMember(project, user);
+        ProjectMember member = new ProjectMember(project, user.getId());
         when(projectRepository.existsById(1L)).thenReturn(true);
         when(memberRepository.findByIdAndProjectId(3L, 1L)).thenReturn(Optional.of(member));
         when(memberRepository.saveAndFlush(member)).thenReturn(member);

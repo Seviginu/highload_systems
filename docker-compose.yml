@@ -1,6 +1,5 @@
 services:
   user-service:
-    profiles: ["user-service-preview"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -32,7 +31,6 @@ services:
     restart: unless-stopped
 
   users-db:
-    profiles: ["user-service-preview"]
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: users
@@ -65,6 +63,8 @@ services:
       discovery-server:
         condition: service_healthy
       app:
+        condition: service_healthy
+      user-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q '\"status\":\"UP\"'"]

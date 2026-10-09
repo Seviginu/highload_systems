@@ -1,6 +1,5 @@
 package itmo.project.entity;
 
-import itmo.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -38,9 +37,8 @@ public class ProjectMember {
     private Project project;
 
     @NotNull(message = "User is required")
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
 
     @CreationTimestamp
     @Column(name = "joined_at", nullable = false, updatable = false)
@@ -53,9 +51,9 @@ public class ProjectMember {
     protected ProjectMember() {
     }
 
-    public ProjectMember(Project project, User user) {
+    public ProjectMember(Project project, Long userId) {
         this.project = project;
-        this.user = user;
+        this.userId = userId;
     }
 
     public void activate() {

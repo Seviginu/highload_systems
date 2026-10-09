@@ -9,9 +9,10 @@ import itmo.project.entity.Project;
 import itmo.project.entity.ProjectStatus;
 import itmo.project.repository.ProjectMemberRepository;
 import itmo.project.repository.ProjectRepository;
-import itmo.user.entity.User;
-import itmo.user.entity.UserRole;
-import itmo.user.repository.UserRepository;
+import itmo.support.TestUser;
+import itmo.support.UserApiStub;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,8 +55,13 @@ class ProjectIT {
     @Autowired
     private ProjectMemberRepository projectMemberRepository;
 
-    @Autowired
-    private UserRepository userRepository;
+    private static final UserApiStub USERS = new UserApiStub();
+
+    @DynamicPropertySource
+    static void userClientProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.cloud.openfeign.client.config.user-service.url", USERS::url);
+        registry.add("spring.cloud.openfeign.client.config.user-service.readTimeout", () -> 200);
+    }
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -69,7 +75,7 @@ class ProjectIT {
         jdbcTemplate.update("DELETE FROM tasks");
         projectMemberRepository.deleteAll();
         projectRepository.deleteAll();
-        userRepository.deleteAll();
+        USERS.clear();
     }
 
     @Test
@@ -178,9 +184,9 @@ class ProjectIT {
 
     @Test
     void shouldManageProjectMembersThroughHttp() {
-        User teamLead = createTeamLead();
-        User developer = userRepository.saveAndFlush(
-                new User("Developer", "developer@example.com", UserRole.DEVELOPER)
+        TestUser teamLead = createTeamLead();
+        TestUser developer = USERS.create(
+                new TestUser("DEVELOPER")
         );
         ProjectResponse project = restTemplate.postForEntity(
                 "/api/v1/projects",
@@ -238,7 +244,7 @@ class ProjectIT {
     }
 
     @Test
-    void shouldRollbackProjectWhenTeamLeadAssignmentFails() {
+    void shouldRejectMissingTeamLeadWithoutWriting() {
         var response = restTemplate.postForEntity(
                 "/api/v1/projects",
                 new CreateProjectRequest(
@@ -258,7 +264,7 @@ class ProjectIT {
 
     @Test
     void shouldRejectDeletingProjectReferencedByTasks() {
-        User teamLead = createTeamLead();
+        TestUser teamLead = createTeamLead();
         ProjectResponse project = restTemplate.postForEntity(
                 "/api/v1/projects",
                 new CreateProjectRequest("Platform", "PLATFORM", null, ProjectStatus.ACTIVE, teamLead.getId()),
@@ -320,7 +326,69 @@ class ProjectIT {
                 .contains("ApiError");
     }
 
-    private User createTeamLead() {
-        return userRepository.saveAndFlush(new User("Team Lead", "lead@example.com", UserRole.TEAM_LEAD));
+    @Test
+    void shouldRejectNonLeadBeforeWriting() {
+        TestUser developer = USERS.create(new TestUser("DEVELOPER"));
+        var response = restTemplate.postForEntity("/api/v1/projects",
+                new CreateProjectRequest("Platform", "PLATFORM", null, ProjectStatus.ACTIVE, developer.getId()), String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).contains("not a team lead");
+        assertThat(projectRepository.count()).isZero();
+        assertThat(projectMemberRepository.count()).isZero();
+    }
+
+    @Test
+    void shouldRollbackProjectWhenLocalMemberInsertFails() {
+        Long lead = createTeamLead().getId();
+        jdbcTemplate.execute("ALTER TABLE project_members ADD CONSTRAINT test_reject_lead CHECK (user_id <> " + lead + ")");
+        try {
+            var response = restTemplate.postForEntity("/api/v1/projects",
+                    new CreateProjectRequest("Platform", "PLATFORM", null, ProjectStatus.ACTIVE, lead), String.class);
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+            assertThat(projectRepository.count()).isZero();
+            assertThat(projectMemberRepository.count()).isZero();
+        } finally {
+            jdbcTemplate.execute("ALTER TABLE project_members DROP CONSTRAINT test_reject_lead");
+        }
+    }
+
+    @Test
+    void shouldRejectUnavailableUserServiceWithoutWritingAndStillReadProjects() {
+        Long lead = createTeamLead().getId();
+        USERS.unavailable(true);
+        var response = restTemplate.postForEntity("/api/v1/projects",
+                new CreateProjectRequest("Platform", "PLATFORM", null, ProjectStatus.ACTIVE, lead), String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getBody()).contains("User service is unavailable");
+        assertThat(projectRepository.count()).isZero();
+        assertThat(projectMemberRepository.count()).isZero();
+        assertThat(restTemplate.getForEntity("/api/v1/projects", String.class).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void shouldTranslateUserServiceTimeoutWithoutWriting() {
+        Long lead = createTeamLead().getId();
+        USERS.delay(500);
+        var response = restTemplate.postForEntity("/api/v1/projects",
+                new CreateProjectRequest("Platform", "PLATFORM", null, ProjectStatus.ACTIVE, lead), String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(projectRepository.count()).isZero();
+        assertThat(projectMemberRepository.count()).isZero();
+    }
+
+    @Test
+    void shouldDetachOnlyUserForeignKeysAndKeepLegacyDataTable() {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM pg_constraint
+                WHERE conname IN ('fk_tasks_author', 'fk_tasks_assignee', 'fk_project_members_user')
+                """, Integer.class);
+        assertThat(count).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM users", Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM pg_constraint WHERE conname = 'fk_tasks_project'",
+                Integer.class)).isEqualTo(1);
+    }
+
+    private TestUser createTeamLead() {
+        return USERS.create(new TestUser("TEAM_LEAD"));
     }
 }
