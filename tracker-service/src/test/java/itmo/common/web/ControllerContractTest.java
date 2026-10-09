@@ -7,6 +7,7 @@ import itmo.task.controller.TaskController;
 import jakarta.validation.constraints.Max;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
+import reactor.core.publisher.Mono;
 
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
@@ -26,13 +27,20 @@ class ControllerContractTest {
     );
 
     @Test
-    void shouldReturnResponseEntityFromEveryEndpoint() {
+    void shouldReturnMonoOfResponseEntityFromEveryEndpoint() {
         CONTROLLERS.stream()
                 .flatMap(controller -> Stream.of(controller.getDeclaredMethods()))
                 .filter(method -> Modifier.isPublic(method.getModifiers()))
                 .forEach(method -> assertThat(method.getReturnType())
                         .as("%s.%s return type", method.getDeclaringClass().getSimpleName(), method.getName())
-                        .isEqualTo(ResponseEntity.class));
+                        .isEqualTo(Mono.class));
+        CONTROLLERS.stream().flatMap(controller -> Stream.of(controller.getDeclaredMethods()))
+                .filter(method -> Modifier.isPublic(method.getModifiers()))
+                .forEach(method -> {
+                    var publisher = (ParameterizedType) method.getGenericReturnType();
+                    var response = (ParameterizedType) publisher.getActualTypeArguments()[0];
+                    assertThat(response.getRawType()).isEqualTo(ResponseEntity.class);
+                });
     }
 
     @Test
@@ -61,6 +69,9 @@ class ControllerContractTest {
     private boolean isListResponse(Type type) {
         if (!(type instanceof ParameterizedType parameterizedType)) {
             return false;
+        }
+        if (parameterizedType.getRawType() == Mono.class) {
+            return isListResponse(parameterizedType.getActualTypeArguments()[0]);
         }
         if (parameterizedType.getRawType() != ResponseEntity.class) {
             return false;

@@ -3,31 +3,31 @@ package itmo.common.web;
 import itmo.common.exception.ConflictException;
 import itmo.common.exception.DependencyUnavailableException;
 import itmo.common.exception.ResourceNotFoundException;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.RejectedExecutionException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.ServerWebInputException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(DependencyUnavailableException.class)
-    public ResponseEntity<ApiError> handleDependencyUnavailable(DependencyUnavailableException error, HttpServletRequest request) {
+    public ResponseEntity<ApiError> handleDependencyUnavailable(DependencyUnavailableException error, ServerWebExchange request) {
         return build(HttpStatus.SERVICE_UNAVAILABLE, error.getMessage(), request, List.of());
     }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(
             ResourceNotFoundException exception,
-            HttpServletRequest request
+            ServerWebExchange request
     ) {
         return build(HttpStatus.NOT_FOUND, exception.getMessage(), request, List.of());
     }
@@ -35,15 +35,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiError> handleConflict(
             ConflictException exception,
-            HttpServletRequest request
+            ServerWebExchange request
     ) {
         return build(HttpStatus.CONFLICT, exception.getMessage(), request, List.of());
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ExceptionHandler(WebExchangeBindException.class)
     public ResponseEntity<ApiError> handleValidation(
-            MethodArgumentNotValidException exception,
-            HttpServletRequest request
+            WebExchangeBindException exception,
+            ServerWebExchange request
     ) {
         List<FieldValidationError> fieldErrors = exception.getBindingResult()
                 .getFieldErrors()
@@ -56,7 +56,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ApiError> handleConstraintViolation(
             ConstraintViolationException exception,
-            HttpServletRequest request
+            ServerWebExchange request
     ) {
         List<FieldValidationError> fieldErrors = exception.getConstraintViolations()
                 .stream()
@@ -68,31 +68,24 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Request validation failed", request, fieldErrors);
     }
 
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiError> handleUnreadableMessage(
-            @SuppressWarnings("unused") HttpMessageNotReadableException exception,
-            HttpServletRequest request
-    ) {
-        return build(HttpStatus.BAD_REQUEST, "Request body is malformed", request, List.of());
+    @ExceptionHandler(ServerWebInputException.class)
+    public ResponseEntity<ApiError> handleMalformedInput(ServerWebInputException exception, ServerWebExchange request) {
+        var parameter = exception.getMethodParameter();
+        String message = parameter != null && !parameter.hasParameterAnnotation(RequestBody.class)
+                ? "Parameter '%s' has an invalid value".formatted(parameter.getParameterName())
+                : "Request body is malformed";
+        return build(HttpStatus.BAD_REQUEST, message, request, List.of());
     }
 
-    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<ApiError> handleTypeMismatch(
-            MethodArgumentTypeMismatchException exception,
-            HttpServletRequest request
-    ) {
-        return build(
-                HttpStatus.BAD_REQUEST,
-                "Parameter '%s' has an invalid value".formatted(exception.getName()),
-                request,
-                List.of()
-        );
+    @ExceptionHandler(RejectedExecutionException.class)
+    public ResponseEntity<ApiError> handleOverload(RejectedExecutionException exception, ServerWebExchange request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "Tracker is busy; retry later", request, List.of());
     }
 
     private ResponseEntity<ApiError> build(
             HttpStatus status,
             String message,
-            HttpServletRequest request,
+            ServerWebExchange request,
             List<FieldValidationError> fieldErrors
     ) {
         ApiError body = new ApiError(
@@ -100,7 +93,7 @@ public class GlobalExceptionHandler {
                 status.value(),
                 status.getReasonPhrase(),
                 message,
-                request.getRequestURI(),
+                request.getRequest().getPath().value(),
                 fieldErrors
         );
         return ResponseEntity.status(status).body(body);

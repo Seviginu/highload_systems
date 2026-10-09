@@ -9,12 +9,15 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import itmo.common.web.ApiError;
+import itmo.infrastructure.reactor.BlockingOperations;
 import itmo.project.dto.AddProjectMemberRequest;
 import itmo.project.dto.ProjectMemberResponse;
 import itmo.project.service.ProjectMemberService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import java.net.URI;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -28,10 +31,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
-
-import java.net.URI;
-import java.util.List;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.util.UriComponentsBuilder;
+import reactor.core.publisher.Mono;
 
 @Validated
 @RestController
@@ -41,8 +43,11 @@ public class ProjectMemberController {
 
     private final ProjectMemberService memberService;
 
-    public ProjectMemberController(ProjectMemberService memberService) {
+    private final BlockingOperations blocking;
+
+    public ProjectMemberController(ProjectMemberService memberService, BlockingOperations blocking) {
         this.memberService = memberService;
+        this.blocking = blocking;
     }
 
     @PostMapping
@@ -77,17 +82,19 @@ public class ProjectMemberController {
             description = "User is already an active member",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ResponseEntity<ProjectMemberResponse> add(
+    public Mono<ResponseEntity<ProjectMemberResponse>> add(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long projectId,
             @Valid @RequestBody AddProjectMemberRequest request
-    ) {
-        ProjectMemberResponse response = memberService.add(projectId, request);
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{id}")
-                .buildAndExpand(response.id())
-                .toUri();
-        return ResponseEntity.created(location).body(response);
+    , ServerWebExchange exchange) {
+        return blocking.call(() -> {
+            ProjectMemberResponse response = memberService.add(projectId, request);
+            URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
+                    .path("/{id}")
+                    .buildAndExpand(response.id())
+                    .toUri();
+            return ResponseEntity.created(location).body(response);
+        });
     }
 
     @GetMapping
@@ -107,7 +114,7 @@ public class ProjectMemberController {
             description = "Project not found",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ResponseEntity<List<ProjectMemberResponse>> findAll(
+    public Mono<ResponseEntity<List<ProjectMemberResponse>>> findAll(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long projectId,
             @Parameter(description = "Zero-based page number", example = "0")
@@ -115,13 +122,15 @@ public class ProjectMemberController {
             @Parameter(description = "Page size from 1 to 50", example = "20")
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
     ) {
-        Page<ProjectMemberResponse> result = memberService.findAll(
-                projectId,
-                PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"))
-        );
-        return ResponseEntity.ok()
-                .header("X-Total-Count", String.valueOf(result.getTotalElements()))
-                .body(result.getContent());
+        return blocking.call(() -> {
+            Page<ProjectMemberResponse> result = memberService.findAll(
+                    projectId,
+                    PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"))
+            );
+            return ResponseEntity.ok()
+                    .header("X-Total-Count", String.valueOf(result.getTotalElements()))
+                    .body(result.getContent());
+        });
     }
 
     @DeleteMapping("/{memberId}")
@@ -132,13 +141,15 @@ public class ProjectMemberController {
             description = "Project or member not found",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ResponseEntity<Void> deactivate(
+    public Mono<ResponseEntity<Void>> deactivate(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long projectId,
             @Parameter(description = "Project membership identifier", example = "1")
             @PathVariable Long memberId
     ) {
-        memberService.deactivate(projectId, memberId);
-        return ResponseEntity.noContent().build();
+        return blocking.call(() -> {
+            memberService.deactivate(projectId, memberId);
+            return ResponseEntity.noContent().build();
+        });
     }
 }

@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import itmo.common.web.ApiError;
+import itmo.infrastructure.reactor.BlockingOperations;
 import itmo.label.dto.CreateLabelRequest;
 import itmo.label.dto.LabelResponse;
 import itmo.label.dto.UpdateLabelRequest;
@@ -16,6 +17,8 @@ import itmo.label.service.LabelService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import java.net.URI;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -30,10 +33,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
-
-import java.net.URI;
-import java.util.List;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.util.UriComponentsBuilder;
+import reactor.core.publisher.Mono;
 
 @Validated
 @RestController
@@ -43,8 +45,11 @@ public class LabelController {
 
     private final LabelService labelService;
 
-    public LabelController(LabelService labelService) {
+    private final BlockingOperations blocking;
+
+    public LabelController(LabelService labelService, BlockingOperations blocking) {
         this.labelService = labelService;
+        this.blocking = blocking;
     }
 
     @PostMapping
@@ -69,13 +74,15 @@ public class LabelController {
             description = "Label name is already used",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ResponseEntity<LabelResponse> create(@Valid @RequestBody CreateLabelRequest request) {
-        LabelResponse response = labelService.create(request);
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{id}")
-                .buildAndExpand(response.id())
-                .toUri();
-        return ResponseEntity.created(location).body(response);
+    public Mono<ResponseEntity<LabelResponse>> create(@Valid @RequestBody CreateLabelRequest request, ServerWebExchange exchange) {
+        return blocking.call(() -> {
+            LabelResponse response = labelService.create(request);
+            URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
+                    .path("/{id}")
+                    .buildAndExpand(response.id())
+                    .toUri();
+            return ResponseEntity.created(location).body(response);
+        });
     }
 
     @GetMapping("/{id}")
@@ -90,11 +97,11 @@ public class LabelController {
             description = "Label not found",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ResponseEntity<LabelResponse> findById(
+    public Mono<ResponseEntity<LabelResponse>> findById(
             @Parameter(description = "Label identifier", example = "1")
             @PathVariable Long id
     ) {
-        return ResponseEntity.ok(labelService.findById(id));
+        return blocking.call(() -> ResponseEntity.ok(labelService.findById(id)));
     }
 
     @GetMapping
@@ -114,18 +121,20 @@ public class LabelController {
             description = "Invalid page or size",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ResponseEntity<List<LabelResponse>> findAll(
+    public Mono<ResponseEntity<List<LabelResponse>>> findAll(
             @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @Parameter(description = "Page size from 1 to 50", example = "20")
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
     ) {
-        Page<LabelResponse> result = labelService.findAll(
-                PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"))
-        );
-        return ResponseEntity.ok()
-                .header("X-Total-Count", String.valueOf(result.getTotalElements()))
-                .body(result.getContent());
+        return blocking.call(() -> {
+            Page<LabelResponse> result = labelService.findAll(
+                    PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"))
+            );
+            return ResponseEntity.ok()
+                    .header("X-Total-Count", String.valueOf(result.getTotalElements()))
+                    .body(result.getContent());
+        });
     }
 
     @PutMapping("/{id}")
@@ -150,12 +159,12 @@ public class LabelController {
             description = "Label name is already used",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ResponseEntity<LabelResponse> update(
+    public Mono<ResponseEntity<LabelResponse>> update(
             @Parameter(description = "Label identifier", example = "1")
             @PathVariable Long id,
             @Valid @RequestBody UpdateLabelRequest request
     ) {
-        return ResponseEntity.ok(labelService.update(id, request));
+        return blocking.call(() -> ResponseEntity.ok(labelService.update(id, request)));
     }
 
     @DeleteMapping("/{id}")
@@ -171,11 +180,13 @@ public class LabelController {
             description = "Label is referenced by tasks",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ResponseEntity<Void> delete(
+    public Mono<ResponseEntity<Void>> delete(
             @Parameter(description = "Label identifier", example = "1")
             @PathVariable Long id
     ) {
-        labelService.delete(id);
-        return ResponseEntity.noContent().build();
+        return blocking.call(() -> {
+            labelService.delete(id);
+            return ResponseEntity.noContent().build();
+        });
     }
 }

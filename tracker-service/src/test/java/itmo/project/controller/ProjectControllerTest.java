@@ -17,8 +17,9 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import itmo.infrastructure.reactor.BlockingOperations;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.List;
@@ -27,14 +28,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
 class ProjectControllerTest {
@@ -42,14 +35,14 @@ class ProjectControllerTest {
     @Mock
     private ProjectService projectService;
 
-    private MockMvc mockMvc;
+    private WebTestClient client;
     private ProjectResponse response;
 
     @BeforeEach
     void setUp() {
-        ProjectController controller = new ProjectController(projectService);
-        mockMvc = MockMvcBuilders.standaloneSetup(controller)
-                .setControllerAdvice(new GlobalExceptionHandler())
+        ProjectController controller = new ProjectController(projectService, new BlockingOperations(Schedulers.boundedElastic()));
+        client = WebTestClient.bindToController(controller)
+                .controllerAdvice(new GlobalExceptionHandler())
                 .build();
         response = new ProjectResponse(
                 1L,
@@ -66,23 +59,23 @@ class ProjectControllerTest {
     void shouldCreateProject() throws Exception {
         when(projectService.create(any(CreateProjectRequest.class))).thenReturn(response);
 
-        mockMvc.perform(post("/api/v1/projects")
+        client.post().uri("http://localhost/api/v1/projects")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validRequest()))
-                .andExpect(status().isCreated())
-                .andExpect(header().string("Location", "http://localhost/api/v1/projects/1"))
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.code").value("PLATFORM"));
+                        .bodyValue(validRequest()).exchange()
+                .expectStatus().isCreated()
+                .expectHeader().valueEquals("Location", "http://localhost/api/v1/projects/1")
+                .expectBody().jsonPath("$.id").isEqualTo(1)
+                .jsonPath("$.code").isEqualTo("PLATFORM");
     }
 
     @Test
     void shouldGetProjectById() throws Exception {
         when(projectService.findById(1L)).thenReturn(response);
 
-        mockMvc.perform(get("/api/v1/projects/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Platform"))
-                .andExpect(jsonPath("$.status").value("ACTIVE"));
+        client.get().uri("/api/v1/projects/1").exchange()
+                .expectStatus().isOk()
+                .expectBody().jsonPath("$.name").isEqualTo("Platform")
+                .jsonPath("$.status").isEqualTo("ACTIVE");
     }
 
     @Test
@@ -91,59 +84,59 @@ class ProjectControllerTest {
         when(projectService.findAll(pageable))
                 .thenReturn(new PageImpl<>(List.of(response), pageable, 1));
 
-        mockMvc.perform(get("/api/v1/projects"))
-                .andExpect(status().isOk())
-                .andExpect(header().string("X-Total-Count", "1"))
-                .andExpect(jsonPath("$[0].id").value(1));
+        client.get().uri("/api/v1/projects").exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals("X-Total-Count", "1")
+                .expectBody().jsonPath("$[0].id").isEqualTo(1);
     }
 
     @Test
     void shouldUpdateProject() throws Exception {
         when(projectService.update(any(Long.class), any(UpdateProjectRequest.class))).thenReturn(response);
 
-        mockMvc.perform(put("/api/v1/projects/1")
+        client.put().uri("http://localhost/api/v1/projects/1")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validRequest()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("PLATFORM"));
+                        .bodyValue(validRequest()).exchange()
+                .expectStatus().isOk()
+                .expectBody().jsonPath("$.code").isEqualTo("PLATFORM");
     }
 
     @Test
     void shouldDeleteProject() throws Exception {
         doNothing().when(projectService).delete(1L);
 
-        mockMvc.perform(delete("/api/v1/projects/1"))
-                .andExpect(status().isNoContent())
-                .andExpect(content().string(""));
+        client.delete().uri("/api/v1/projects/1").exchange()
+                .expectStatus().isNoContent()
+                .expectBody().isEmpty();
 
         verify(projectService).delete(1L);
     }
 
     @Test
     void shouldReturnValidationErrors() throws Exception {
-        mockMvc.perform(post("/api/v1/projects")
+        client.post().uri("http://localhost/api/v1/projects")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
+                        .bodyValue("""
                                 {
                                   "name": " ",
                                   "code": "1-invalid",
                                   "status": null
                                 }
-                                """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Request validation failed"))
-                .andExpect(jsonPath("$.path").value("/api/v1/projects"))
-                .andExpect(jsonPath("$.fieldErrors.length()").value(4));
+                                """).exchange()
+                .expectStatus().isBadRequest()
+                .expectBody().jsonPath("$.message").isEqualTo("Request validation failed")
+                .jsonPath("$.path").isEqualTo("/api/v1/projects")
+                .jsonPath("$.fieldErrors.length()").isEqualTo(4);
     }
 
     @Test
     void shouldReturnNotFoundError() throws Exception {
         when(projectService.findById(42L)).thenThrow(new ResourceNotFoundException("Project", 42L));
 
-        mockMvc.perform(get("/api/v1/projects/42"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.status").value(404))
-                .andExpect(jsonPath("$.message").value("Project with id '42' was not found"));
+        client.get().uri("/api/v1/projects/42").exchange()
+                .expectStatus().isNotFound()
+                .expectBody().jsonPath("$.status").isEqualTo(404)
+                .jsonPath("$.message").isEqualTo("Project with id '42' was not found");
     }
 
     @Test
@@ -151,27 +144,27 @@ class ProjectControllerTest {
         when(projectService.create(any(CreateProjectRequest.class)))
                 .thenThrow(new ConflictException("Project already exists"));
 
-        mockMvc.perform(post("/api/v1/projects")
+        client.post().uri("http://localhost/api/v1/projects")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validRequest()))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.message").value("Project already exists"));
+                        .bodyValue(validRequest()).exchange()
+                .expectStatus().isEqualTo(409)
+                .expectBody().jsonPath("$.status").isEqualTo(409)
+                .jsonPath("$.message").isEqualTo("Project already exists");
     }
 
     @Test
     void shouldReturnBadRequestForMalformedStatus() throws Exception {
-        mockMvc.perform(post("/api/v1/projects")
+        client.post().uri("http://localhost/api/v1/projects")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
+                        .bodyValue("""
                                 {
                                   "name": "Platform",
                                   "code": "PLATFORM",
                                   "status": "UNKNOWN"
                                 }
-                                """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Request body is malformed"));
+                                """).exchange()
+                .expectStatus().isBadRequest()
+                .expectBody().jsonPath("$.message").isEqualTo("Request body is malformed");
     }
 
     private String validRequest() {

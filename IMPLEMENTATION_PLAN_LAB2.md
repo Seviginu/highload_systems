@@ -3,8 +3,8 @@
 Статус: структура Maven, Config Server, Eureka и Gateway реализованы.
 Политика логического удаления пользователей подтверждена. User-service выделен
 на Reactor/R2DBC; tracker-service использует Feign; Gateway направляет запросы
-в два бизнес-сервиса. Перевод tracker-service на Reactor/WebFlux и Circuit Breaker
-остаются следующими этапами.
+в два бизнес-сервиса. Tracker-service переведён на Reactor/WebFlux с изоляцией
+блокирующей JPA-бизнес-логики. Circuit Breaker и итоговая приёмка остаются впереди.
 Основа: текущий монолит ЛР №1, ветка `main`, Java 21, Spring Boot 3.5.6,
 Maven, PostgreSQL, JPA, Liquibase, Redis, OpenAPI, JUnit и Testcontainers.
 
@@ -124,8 +124,37 @@ Maven, PostgreSQL, JPA, Liquibase, Redis, OpenAPI, JUnit и Testcontainers.
   символами; повторный импорт отклонён, новый ID больше 7000.
   Временные контейнеры, сеть и volumes удалены; рабочее окружение сохранено.
 
-Следующий этап — перевод tracker-service на Reactor/WebFlux с изоляцией
-блокирующих JPA, Feign и Redis. Circuit Breaker добавляется отдельным этапом.
+Выполнен этап Reactor/WebFlux для tracker-service:
+
+- Web MVC и springdoc-webmvc заменены на WebFlux и springdoc-webflux-api.
+  Сервер — Netty; контроллеры возвращают Mono<ResponseEntity<DTO>>.
+- Добавлены BlockingOperations и отдельный boundedElastic scheduler.
+  Весь вызов сервисного прокси, включая JPA, Feign и Redis/cache interceptors,
+  выполняется лениво на tracker-blocking. В runtime-коде нет block/subscribe.
+- Синхронные сервисы и локальные транзакции сохранены: вызов и маппинг в DTO
+  завершаются внутри worker-потока. Feign не включается в DB-транзакцию.
+- Лимиты scheduler задаются через Config Server и окружение: 10 потоков,
+  очередь 100 задач на backing-поток. Отказ планирования переводится в 503.
+- Ошибки/валидация адаптированы к WebFlux с сохранением ApiError и прежних
+  сообщений для неверного тела и параметров. Location использует внешний Host.
+- Для синхронного Feign явно добавлены JSON HttpMessageConverters только
+  в контексте UserClient; MVC-автоконфигурация больше не используется.
+- Контрактные HTTP-тесты переведены на WebTestClient. Unit-тесты проверяют
+  ленивый вызов, выход из non-blocking потока, бизнес-ошибки и ограниченную очередь.
+- BlockingBoundaryIT с PostgreSQL, Redis, реальным Feign HTTP-stub и одним
+  Netty event loop подтверждает ответ actuator/info во время заблокированного
+  Feign-вызова. JPA, Feign и Redis работают на tracker-blocking; у JPA есть
+  локальная транзакция, у удалённой проверки её нет.
+- Полный mvn clean verify на Java 21 проходит: 126 unit- и 43 integration-теста.
+  Покрытие строк: tracker-service — 91.34%, user-service — 98.35%.
+  Существующие rollback-сценарии создания проекта и переноса задачи проходят.
+- Docker smoke-проверка проходит: собраны пять приложений, подтверждены
+  регистрация в Eureka, общий Swagger, CRUD через Gateway, пагинация, Location
+  и ошибки. Проверены остановка/восстановление user-service, перенос задачи,
+  логическое удаление и исторические ссылки. Временные контейнеры и тома удалены.
+
+Следующий этап — Circuit Breaker для Feign; затем агрегированный отчёт
+покрытия, итоговая приёмка и документация для защиты.
 
 ## 1. Границы сервисов
 

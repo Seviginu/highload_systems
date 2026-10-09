@@ -8,6 +8,8 @@ import java.net.InetSocketAddress;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -19,6 +21,8 @@ public class UserApiStub {
     private final HttpServer server;
     private volatile boolean unavailable;
     private volatile long delayMillis;
+    private volatile CountDownLatch responseEntered;
+    private volatile CountDownLatch responseRelease;
 
     public UserApiStub() {
         try {
@@ -38,6 +42,14 @@ public class UserApiStub {
                     return;
                 }
                 var request = mapper.readTree(exchange.getRequestBody());
+                CountDownLatch entered = responseEntered;
+                CountDownLatch release = responseRelease;
+                if (entered != null && release != null) {
+                    entered.countDown();
+                    try { release.await(10, TimeUnit.SECONDS); } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
                 long delay = delayMillis;
                 if (delay > 0) {
                     try { Thread.sleep(delay); } catch (InterruptedException error) {
@@ -79,5 +91,12 @@ public class UserApiStub {
     public void delete(Long id) { users.remove(id); }
     public void unavailable(boolean value) { unavailable = value; }
     public void delay(long value) { delayMillis = value; }
-    public void clear() { users.clear(); unavailable = false; delayMillis = 0; }
+    public void blockResponses(CountDownLatch entered, CountDownLatch release) {
+        responseEntered = entered;
+        responseRelease = release;
+    }
+    public void clear() {
+        users.clear(); unavailable = false; delayMillis = 0;
+        responseEntered = null; responseRelease = null;
+    }
 }

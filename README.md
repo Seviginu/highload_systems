@@ -10,8 +10,9 @@ Java 21, Spring Boot, Maven, PostgreSQL, Liquibase и Redis.
 Пользователи выделены в `user-service` на WebFlux + Reactor + R2DBC со своей БД.
 Трекер проверяет активных пользователей и роли через Feign по имени user-service.
 Добавлены Config Server, Eureka и Gateway на Spring Cloud 2025.0.3.
-Gateway работает на WebFlux; перевод tracker-service на Reactor/WebFlux
-и Circuit Breaker остаются следующими этапами. Общий Swagger UI размещён на Gateway, а tracker-service
+Оба бизнес-сервиса и Gateway работают на WebFlux/Reactor. Tracker сохраняет
+Spring Data JPA и выполняет синхронную бизнес-логику на отдельном scheduler.
+Circuit Breaker остаётся следующим этапом. Общий Swagger UI размещён на Gateway, а tracker-service
 публикует только спецификацию OpenAPI.
 
 ```text
@@ -21,7 +22,7 @@ discovery-server/
 api-gateway/
 config-repository/        # общие и индивидуальные настройки приложений
 user-service/            # Reactor + R2DBC, users-db
-tracker-service/         # JPA, собственная БД и Redis
+tracker-service/         # Reactor/WebFlux + JPA, собственная БД и Redis
   pom.xml
   src/main/
   src/test/
@@ -194,6 +195,36 @@ DELETE выполняет логическое удаление: ID и запи�
 поэтому текст задачи можно изменить после удаления автора/исполнителя.
 При переносе задачи выбранный исполнитель должен быть активным пользователем
 и активным участником целевого проекта. Межсервисная ACID-транзакция не используется.
+
+## Reactor и блокирующая бизнес-логика трекера
+
+HTTP-сервер tracker-service — Netty/WebFlux. Контроллеры возвращают
+`Mono<ResponseEntity<DTO>>`; списки сохраняют прежние JSON-массивы, заголовки
+пагинации и лимит 50. Location строится из ServerWebExchange с внешним Host.
+
+BlockingOperations выполняет весь вызов сервисного Spring-прокси через
+`Mono.fromCallable(...).subscribeOn(trackerBlockingScheduler)`.
+На этом worker-потоке выполняются JPA, синхронный Feign и Redis-кэш, включая
+cache interceptors. В обработчиках запросов нет `.block()` или ручного subscribe.
+JPA остаётся блокирующим; Reactor изолирует эти вызовы от HTTP event loop.
+
+Сервисы и локальные `@Transactional`/TransactionOperations остаются синхронными.
+Транзакция начинается и завершается внутри вызова на worker-потоке; наружу
+возвращается DTO. Проверка пользователя через Feign по-прежнему предшествует
+локальной транзакции. JSON-конвертеры Feign заданы отдельно в контексте UserClient,
+поскольку WebFlux не создаёт прежнюю MVC-конфигурацию HttpMessageConverters.
+
+Настройки scheduler читаются из Config Server и переменных среды:
+
+- `TRACKER_BLOCKING_THREADS` — максимум worker-потоков, по умолчанию 10.
+- `TRACKER_BLOCKING_QUEUED_TASKS` — предел очереди на backing-поток, по умолчанию 100.
+
+При переполнении очереди API возвращает структурированный 503
+`Tracker is busy; retry later`. Scheduler закрывается при остановке приложения.
+HTTP-тесты используют WebTestClient; прежние PostgreSQL/Redis integration-тесты
+сохранены. BlockingBoundaryIT проверяет реальный сервер с одним HTTP event loop:
+пока Feign ожидает ответа, actuator/info остаётся доступным, а JPA, Feign и Redis
+работают на tracker-blocking. Также проверяются границы локальной транзакции.
 
 ## Перенос пользователей из ЛР №1
 

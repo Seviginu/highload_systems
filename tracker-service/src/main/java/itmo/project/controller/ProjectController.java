@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import itmo.common.web.ApiError;
+import itmo.infrastructure.reactor.BlockingOperations;
 import itmo.project.dto.CreateProjectRequest;
 import itmo.project.dto.ProjectResponse;
 import itmo.project.dto.UpdateProjectRequest;
@@ -16,6 +17,8 @@ import itmo.project.service.ProjectService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import java.net.URI;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -30,10 +33,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
-
-import java.net.URI;
-import java.util.List;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.util.UriComponentsBuilder;
+import reactor.core.publisher.Mono;
 
 @Validated
 @RestController
@@ -43,8 +45,11 @@ public class ProjectController {
 
     private final ProjectService projectService;
 
-    public ProjectController(ProjectService projectService) {
+    private final BlockingOperations blocking;
+
+    public ProjectController(ProjectService projectService, BlockingOperations blocking) {
         this.projectService = projectService;
+        this.blocking = blocking;
     }
 
     @PostMapping
@@ -69,13 +74,15 @@ public class ProjectController {
             description = "Project code is already used",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ResponseEntity<ProjectResponse> create(@Valid @RequestBody CreateProjectRequest request) {
-        ProjectResponse response = projectService.create(request);
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{id}")
-                .buildAndExpand(response.id())
-                .toUri();
-        return ResponseEntity.created(location).body(response);
+    public Mono<ResponseEntity<ProjectResponse>> create(@Valid @RequestBody CreateProjectRequest request, ServerWebExchange exchange) {
+        return blocking.call(() -> {
+            ProjectResponse response = projectService.create(request);
+            URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
+                    .path("/{id}")
+                    .buildAndExpand(response.id())
+                    .toUri();
+            return ResponseEntity.created(location).body(response);
+        });
     }
 
     @GetMapping("/{id}")
@@ -90,11 +97,11 @@ public class ProjectController {
             description = "Project not found",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ResponseEntity<ProjectResponse> findById(
+    public Mono<ResponseEntity<ProjectResponse>> findById(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long id
     ) {
-        return ResponseEntity.ok(projectService.findById(id));
+        return blocking.call(() -> ResponseEntity.ok(projectService.findById(id)));
     }
 
     @GetMapping
@@ -114,18 +121,20 @@ public class ProjectController {
             description = "Invalid page or size",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ResponseEntity<List<ProjectResponse>> findAll(
+    public Mono<ResponseEntity<List<ProjectResponse>>> findAll(
             @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @Parameter(description = "Page size from 1 to 50", example = "20")
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
     ) {
-        Page<ProjectResponse> result = projectService.findAll(
-                PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"))
-        );
-        return ResponseEntity.ok()
-                .header("X-Total-Count", String.valueOf(result.getTotalElements()))
-                .body(result.getContent());
+        return blocking.call(() -> {
+            Page<ProjectResponse> result = projectService.findAll(
+                    PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"))
+            );
+            return ResponseEntity.ok()
+                    .header("X-Total-Count", String.valueOf(result.getTotalElements()))
+                    .body(result.getContent());
+        });
     }
 
     @PutMapping("/{id}")
@@ -150,12 +159,12 @@ public class ProjectController {
             description = "Project code is already used",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ResponseEntity<ProjectResponse> update(
+    public Mono<ResponseEntity<ProjectResponse>> update(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long id,
             @Valid @RequestBody UpdateProjectRequest request
     ) {
-        return ResponseEntity.ok(projectService.update(id, request));
+        return blocking.call(() -> ResponseEntity.ok(projectService.update(id, request)));
     }
 
     @DeleteMapping("/{id}")
@@ -171,11 +180,13 @@ public class ProjectController {
             description = "Project is referenced by another record",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public ResponseEntity<Void> delete(
+    public Mono<ResponseEntity<Void>> delete(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long id
     ) {
-        projectService.delete(id);
-        return ResponseEntity.noContent().build();
+        return blocking.call(() -> {
+            projectService.delete(id);
+            return ResponseEntity.noContent().build();
+        });
     }
 }

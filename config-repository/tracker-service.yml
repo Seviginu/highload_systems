@@ -20,6 +20,9 @@ spring:
       repositories:
         enabled: false
 app:
+  blocking:
+    threads: ${TRACKER_BLOCKING_THREADS:10}
+    queued-tasks: ${TRACKER_BLOCKING_QUEUED_TASKS:100}
   cache:
     tasks:
       ttl: ${TASK_CACHE_TTL:10m}
