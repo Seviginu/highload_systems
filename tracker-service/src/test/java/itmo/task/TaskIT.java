@@ -109,7 +109,7 @@ class TaskIT {
     void shouldCacheTaskAndKeepCacheConsistentAfterWrites() {
         TestData data = createTestData();
         TaskResponse created = restTemplate.postForEntity(
-                "/api/tasks",
+                "/api/v1/tasks",
                 createRequest(data, "PLATFORM-1"),
                 TaskResponse.class
         ).getBody();
@@ -124,7 +124,7 @@ class TaskIT {
         taskCache().clear();
         jdbcTemplate.update("UPDATE tasks SET title = ? WHERE id = ?", "Loaded from database", created.id());
         TaskResponse loadedFromDatabase = restTemplate.getForObject(
-                "/api/tasks/{id}",
+                "/api/v1/tasks/{id}",
                 TaskResponse.class,
                 created.id()
         );
@@ -134,7 +134,7 @@ class TaskIT {
 
         jdbcTemplate.update("UPDATE tasks SET title = ? WHERE id = ?", "Changed outside service", created.id());
         TaskResponse cachedRead = restTemplate.getForObject(
-                "/api/tasks/{id}",
+                "/api/v1/tasks/{id}",
                 TaskResponse.class,
                 created.id()
         );
@@ -142,7 +142,7 @@ class TaskIT {
         assertThat(cachedRead.title()).isEqualTo("Loaded from database");
 
         var updateResponse = restTemplate.exchange(
-                "/api/tasks/{id}",
+                "/api/v1/tasks/{id}",
                 HttpMethod.PUT,
                 new HttpEntity<>(new UpdateTaskRequest(
                         created.taskKey(),
@@ -166,7 +166,7 @@ class TaskIT {
         assertThat(cachedAfterUpdate.title()).isEqualTo("Updated through service");
 
         var deleteResponse = restTemplate.exchange(
-                "/api/tasks/{id}",
+                "/api/v1/tasks/{id}",
                 HttpMethod.DELETE,
                 HttpEntity.EMPTY,
                 Void.class,
@@ -196,7 +196,7 @@ class TaskIT {
     void shouldPerformTaskCrudWithRelationsAndOptimisticVersion() {
         TestData data = createTestData();
         var createResponse = restTemplate.postForEntity(
-                "/api/tasks",
+                "/api/v1/tasks",
                 createRequest(data, "platform-1"),
                 TaskResponse.class
         );
@@ -216,7 +216,7 @@ class TaskIT {
         assertThat(persisted.getProject().getId()).isEqualTo(data.project().getId());
         assertThat(persisted.getLabels()).extracting(Label::getId).containsExactly(data.label().getId());
 
-        var listResponse = restTemplate.getForEntity("/api/tasks?page=0&size=20", TaskResponse[].class);
+        var listResponse = restTemplate.getForEntity("/api/v1/tasks?page=0&size=20", TaskResponse[].class);
         assertThat(listResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(listResponse.getHeaders().getFirst("X-Total-Count")).isEqualTo("1");
 
@@ -233,7 +233,7 @@ class TaskIT {
                 created.version()
         );
         var updateResponse = restTemplate.exchange(
-                "/api/tasks/{id}",
+                "/api/v1/tasks/{id}",
                 HttpMethod.PUT,
                 new HttpEntity<>(updateRequest),
                 TaskResponse.class,
@@ -250,7 +250,7 @@ class TaskIT {
         assertThat(updated.version()).isEqualTo(created.version() + 1);
 
         var staleResponse = restTemplate.exchange(
-                "/api/tasks/{id}",
+                "/api/v1/tasks/{id}",
                 HttpMethod.PUT,
                 new HttpEntity<>(updateRequest),
                 String.class,
@@ -260,7 +260,7 @@ class TaskIT {
         assertThat(staleResponse.getBody()).contains("modified by another request");
 
         var deleteResponse = restTemplate.exchange(
-                "/api/tasks/{id}",
+                "/api/v1/tasks/{id}",
                 HttpMethod.DELETE,
                 HttpEntity.EMPTY,
                 Void.class,
@@ -274,12 +274,12 @@ class TaskIT {
     void shouldFilterTasksByRelationsStatusAndPriority() {
         TestData data = createTestData();
         TaskResponse matching = restTemplate.postForEntity(
-                "/api/tasks",
+                "/api/v1/tasks",
                 createRequest(data, "PLATFORM-1"),
                 TaskResponse.class
         ).getBody();
         TaskResponse differentState = restTemplate.postForEntity(
-                "/api/tasks",
+                "/api/v1/tasks",
                 new CreateTaskRequest(
                         "PLATFORM-2",
                         "Completed task",
@@ -307,7 +307,7 @@ class TaskIT {
         );
         Label anotherLabel = labelRepository.saveAndFlush(new Label("Mobile", "#445566"));
         restTemplate.postForEntity(
-                "/api/tasks",
+                "/api/v1/tasks",
                 new CreateTaskRequest(
                         "MOBILE-1",
                         "Another task",
@@ -322,7 +322,7 @@ class TaskIT {
                 TaskResponse.class
         );
 
-        String combinedFilter = "/api/tasks?projectId=%d&authorId=%d&assigneeId=%d&labelId=%d"
+        String combinedFilter = "/api/v1/tasks?projectId=%d&authorId=%d&assigneeId=%d&labelId=%d"
                 .formatted(
                         data.project().getId(),
                         data.author().getId(),
@@ -336,7 +336,7 @@ class TaskIT {
         assertThat(filtered.getBody()).extracting(TaskResponse::id).containsExactly(matching.id());
 
         var byLabel = restTemplate.getForEntity(
-                "/api/tasks?labelId={labelId}",
+                "/api/v1/tasks?labelId={labelId}",
                 TaskResponse[].class,
                 data.label().getId()
         );
@@ -349,13 +349,13 @@ class TaskIT {
     void shouldRejectDuplicateTaskKey() {
         TestData data = createTestData();
         assertThat(restTemplate.postForEntity(
-                "/api/tasks",
+                "/api/v1/tasks",
                 createRequest(data, "PLATFORM-1"),
                 TaskResponse.class
         ).getStatusCode()).isEqualTo(HttpStatus.CREATED);
 
         var duplicateResponse = restTemplate.postForEntity(
-                "/api/tasks",
+                "/api/v1/tasks",
                 createRequest(data, "platform-1"),
                 String.class
         );
@@ -371,7 +371,7 @@ class TaskIT {
                 new User("Author", "author@example.com", UserRole.TEAM_LEAD)
         );
         var response = restTemplate.postForEntity(
-                "/api/tasks",
+                "/api/v1/tasks",
                 new CreateTaskRequest(
                         "PLATFORM-1",
                         "Task",
@@ -394,20 +394,20 @@ class TaskIT {
     void shouldReadTaskFeedByCursorWithoutCountQuery() {
         TestData data = createTestData();
         TaskResponse first = restTemplate.postForEntity(
-                "/api/tasks", createRequest(data, "PLATFORM-1"), TaskResponse.class
+                "/api/v1/tasks", createRequest(data, "PLATFORM-1"), TaskResponse.class
         ).getBody();
         TaskResponse second = restTemplate.postForEntity(
-                "/api/tasks", createRequest(data, "PLATFORM-2"), TaskResponse.class
+                "/api/v1/tasks", createRequest(data, "PLATFORM-2"), TaskResponse.class
         ).getBody();
         TaskResponse third = restTemplate.postForEntity(
-                "/api/tasks", createRequest(data, "PLATFORM-3"), TaskResponse.class
+                "/api/v1/tasks", createRequest(data, "PLATFORM-3"), TaskResponse.class
         ).getBody();
         assertThat(first).isNotNull();
         assertThat(second).isNotNull();
         assertThat(third).isNotNull();
 
         SqlStatementInspector.clear();
-        var firstPage = restTemplate.getForEntity("/api/tasks/feed?limit=2", TaskResponse[].class);
+        var firstPage = restTemplate.getForEntity("/api/v1/tasks/feed?limit=2", TaskResponse[].class);
 
         assertThat(firstPage.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(firstPage.getBody()).extracting(TaskResponse::id)
@@ -418,7 +418,7 @@ class TaskIT {
                 .noneMatch(sql -> sql.toLowerCase().contains("count("));
 
         var lastPage = restTemplate.getForEntity(
-                "/api/tasks/feed?afterId={afterId}&limit=2",
+                "/api/v1/tasks/feed?afterId={afterId}&limit=2",
                 TaskResponse[].class,
                 second.id()
         );
@@ -440,14 +440,14 @@ class TaskIT {
         Label targetLabel = labelRepository.saveAndFlush(new Label("Mobile", "#445566"));
         projectMemberRepository.saveAndFlush(new ProjectMember(targetProject, data.assignee()));
         TaskResponse created = restTemplate.postForEntity(
-                "/api/tasks",
+                "/api/v1/tasks",
                 createRequest(data, "PLATFORM-1"),
                 TaskResponse.class
         ).getBody();
         assertThat(created).isNotNull();
 
         var moveResponse = restTemplate.postForEntity(
-                "/api/tasks/{id}/move",
+                "/api/v1/tasks/{id}/move",
                 new MoveTaskRequest(
                         targetProject.getId(),
                         data.assignee().getId(),
@@ -470,7 +470,7 @@ class TaskIT {
         assertThat(cachedAfterMove.projectId()).isEqualTo(targetProject.getId());
 
         var rejectedResponse = restTemplate.postForEntity(
-                "/api/tasks/{id}/move",
+                "/api/v1/tasks/{id}/move",
                 new MoveTaskRequest(
                         rejectedProject.getId(),
                         data.assignee().getId(),
@@ -497,14 +497,14 @@ class TaskIT {
                 new Project("Mobile", "MOBILE", null, ProjectStatus.ACTIVE)
         );
         TaskResponse created = restTemplate.postForEntity(
-                "/api/tasks",
+                "/api/v1/tasks",
                 createRequest(data, "PLATFORM-1"),
                 TaskResponse.class
         ).getBody();
         assertThat(created).isNotNull();
 
         var response = restTemplate.exchange(
-                "/api/tasks/{id}",
+                "/api/v1/tasks/{id}",
                 HttpMethod.PUT,
                 new HttpEntity<>(new UpdateTaskRequest(
                         created.taskKey(),
@@ -552,12 +552,12 @@ class TaskIT {
 
     @Test
     void shouldRejectPageSizeAboveFiftyAndExposeOpenApi() {
-        var invalidPage = restTemplate.getForEntity("/api/tasks?size=51", String.class);
+        var invalidPage = restTemplate.getForEntity("/api/v1/tasks?size=51", String.class);
         assertThat(invalidPage.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        var invalidFilter = restTemplate.getForEntity("/api/tasks?labelId=0", String.class);
+        var invalidFilter = restTemplate.getForEntity("/api/v1/tasks?labelId=0", String.class);
         assertThat(invalidFilter.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         var invalidFeed = restTemplate.getForEntity(
-                "/api/tasks/feed?afterId=-1&limit=51",
+                "/api/v1/tasks/feed?afterId=-1&limit=51",
                 String.class
         );
         assertThat(invalidFeed.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -565,13 +565,13 @@ class TaskIT {
         var openApi = restTemplate.getForEntity("/v3/api-docs", String.class);
         assertThat(openApi.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(openApi.getBody())
-                .contains("/api/users")
-                .contains("/api/projects")
-                .contains("/api/projects/{projectId}/members")
-                .contains("/api/labels")
-                .contains("/api/tasks")
-                .contains("/api/tasks/feed")
-                .contains("/api/tasks/{id}/move")
+                .contains("/api/v1/users")
+                .contains("/api/v1/projects")
+                .contains("/api/v1/projects/{projectId}/members")
+                .contains("/api/v1/labels")
+                .contains("/api/v1/tasks")
+                .contains("/api/v1/tasks/feed")
+                .contains("/api/v1/tasks/{id}/move")
                 .contains("X-Total-Count")
                 .contains("X-Next-Cursor")
                 .contains("UserResponse")

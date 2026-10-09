@@ -88,7 +88,7 @@ class ProjectIT {
     void shouldPerformProjectCrudThroughHttp() {
         Long teamLeadId = createTeamLead().getId();
         var createResponse = restTemplate.postForEntity(
-                "/api/projects",
+                "/api/v1/projects",
                 new CreateProjectRequest(
                         "Platform",
                         "platform",
@@ -107,7 +107,7 @@ class ProjectIT {
         assertThat(created.code()).isEqualTo("PLATFORM");
 
         var getResponse = restTemplate.getForEntity(
-                "/api/projects/{id}",
+                "/api/v1/projects/{id}",
                 ProjectResponse.class,
                 created.id()
         );
@@ -115,7 +115,7 @@ class ProjectIT {
         assertThat(getResponse.getBody()).isEqualTo(created);
 
         var listResponse = restTemplate.getForEntity(
-                "/api/projects?page=0&size=20",
+                "/api/v1/projects?page=0&size=20",
                 ProjectResponse[].class
         );
         assertThat(listResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -123,7 +123,7 @@ class ProjectIT {
         assertThat(listResponse.getBody()).hasSize(1);
 
         var updateResponse = restTemplate.exchange(
-                "/api/projects/{id}",
+                "/api/v1/projects/{id}",
                 HttpMethod.PUT,
                 new HttpEntity<>(new UpdateProjectRequest(
                         "Platform Core",
@@ -140,7 +140,7 @@ class ProjectIT {
         assertThat(updateResponse.getBody().status()).isEqualTo(ProjectStatus.ACTIVE);
 
         var deleteResponse = restTemplate.exchange(
-                "/api/projects/{id}",
+                "/api/v1/projects/{id}",
                 HttpMethod.DELETE,
                 HttpEntity.EMPTY,
                 Void.class,
@@ -148,7 +148,7 @@ class ProjectIT {
         );
         assertThat(deleteResponse.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         assertThat(restTemplate.getForEntity(
-                "/api/projects/{id}",
+                "/api/v1/projects/{id}",
                 String.class,
                 created.id()
         ).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
@@ -158,14 +158,14 @@ class ProjectIT {
     void shouldRejectDuplicateNormalizedCode() {
         Long teamLeadId = createTeamLead().getId();
         var firstResponse = restTemplate.postForEntity(
-                "/api/projects",
+                "/api/v1/projects",
                 new CreateProjectRequest("Platform", "platform", null, ProjectStatus.ACTIVE, teamLeadId),
                 ProjectResponse.class
         );
         assertThat(firstResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
 
         var duplicateResponse = restTemplate.postForEntity(
-                "/api/projects",
+                "/api/v1/projects",
                 new CreateProjectRequest("Another", "PLATFORM", null, ProjectStatus.PLANNED, teamLeadId),
                 String.class
         );
@@ -181,7 +181,7 @@ class ProjectIT {
                 new User("Developer", "developer@example.com", UserRole.DEVELOPER)
         );
         ProjectResponse project = restTemplate.postForEntity(
-                "/api/projects",
+                "/api/v1/projects",
                 new CreateProjectRequest(
                         "Platform",
                         "PLATFORM",
@@ -194,7 +194,7 @@ class ProjectIT {
         assertThat(project).isNotNull();
 
         var addResponse = restTemplate.postForEntity(
-                "/api/projects/{projectId}/members",
+                "/api/v1/projects/{projectId}/members",
                 new AddProjectMemberRequest(developer.getId()),
                 ProjectMemberResponse.class,
                 project.id()
@@ -207,7 +207,7 @@ class ProjectIT {
         assertThat(addedMember.active()).isTrue();
 
         var listResponse = restTemplate.getForEntity(
-                "/api/projects/{projectId}/members?page=0&size=20",
+                "/api/v1/projects/{projectId}/members?page=0&size=20",
                 ProjectMemberResponse[].class,
                 project.id()
         );
@@ -217,14 +217,14 @@ class ProjectIT {
                 .containsExactlyInAnyOrder(teamLead.getId(), developer.getId());
 
         var invalidPageResponse = restTemplate.getForEntity(
-                "/api/projects/{projectId}/members?size=51",
+                "/api/v1/projects/{projectId}/members?size=51",
                 String.class,
                 project.id()
         );
         assertThat(invalidPageResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 
         var deactivateResponse = restTemplate.exchange(
-                "/api/projects/{projectId}/members/{memberId}",
+                "/api/v1/projects/{projectId}/members/{memberId}",
                 HttpMethod.DELETE,
                 HttpEntity.EMPTY,
                 Void.class,
@@ -238,7 +238,7 @@ class ProjectIT {
     @Test
     void shouldRollbackProjectWhenTeamLeadAssignmentFails() {
         var response = restTemplate.postForEntity(
-                "/api/projects",
+                "/api/v1/projects",
                 new CreateProjectRequest(
                         "Platform",
                         "PLATFORM",
@@ -258,7 +258,7 @@ class ProjectIT {
     void shouldRejectDeletingProjectReferencedByTasks() {
         User teamLead = createTeamLead();
         ProjectResponse project = restTemplate.postForEntity(
-                "/api/projects",
+                "/api/v1/projects",
                 new CreateProjectRequest("Platform", "PLATFORM", null, ProjectStatus.ACTIVE, teamLead.getId()),
                 ProjectResponse.class
         ).getBody();
@@ -272,7 +272,7 @@ class ProjectIT {
         );
 
         var response = restTemplate.exchange(
-                "/api/projects/{id}",
+                "/api/v1/projects/{id}",
                 HttpMethod.DELETE,
                 HttpEntity.EMPTY,
                 String.class,
@@ -287,7 +287,7 @@ class ProjectIT {
 
     @Test
     void shouldRejectPageSizeAboveFifty() {
-        var response = restTemplate.getForEntity("/api/projects?size=51", String.class);
+        var response = restTemplate.getForEntity("/api/v1/projects?size=51", String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).contains("Request validation failed");
@@ -310,8 +310,8 @@ class ProjectIT {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody())
-                .contains("/api/projects")
-                .contains("/api/projects/{projectId}/members")
+                .contains("/api/v1/projects")
+                .contains("/api/v1/projects/{projectId}/members")
                 .contains("X-Total-Count")
                 .contains("ProjectResponse")
                 .contains("ProjectMemberResponse")

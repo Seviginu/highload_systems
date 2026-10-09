@@ -60,11 +60,11 @@ class LabelControllerTest {
     void shouldCreateLabel() throws Exception {
         when(labelService.create(any(CreateLabelRequest.class))).thenReturn(response);
 
-        mockMvc.perform(post("/api/labels")
+        mockMvc.perform(post("/api/v1/labels")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))
                 .andExpect(status().isCreated())
-                .andExpect(header().string("Location", "http://localhost/api/labels/1"))
+                .andExpect(header().string("Location", "http://localhost/api/v1/labels/1"))
                 .andExpect(jsonPath("$.name").value("Backend"))
                 .andExpect(jsonPath("$.color").value("#A1B2C3"));
     }
@@ -73,7 +73,7 @@ class LabelControllerTest {
     void shouldGetLabelById() throws Exception {
         when(labelService.findById(1L)).thenReturn(response);
 
-        mockMvc.perform(get("/api/labels/1"))
+        mockMvc.perform(get("/api/v1/labels/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
     }
@@ -83,7 +83,7 @@ class LabelControllerTest {
         PageRequest pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "id"));
         when(labelService.findAll(pageable)).thenReturn(new PageImpl<>(List.of(response), pageable, 1));
 
-        mockMvc.perform(get("/api/labels"))
+        mockMvc.perform(get("/api/v1/labels"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Total-Count", "1"))
                 .andExpect(jsonPath("$[0].name").value("Backend"));
@@ -93,7 +93,7 @@ class LabelControllerTest {
     void shouldUpdateLabel() throws Exception {
         when(labelService.update(any(Long.class), any(UpdateLabelRequest.class))).thenReturn(response);
 
-        mockMvc.perform(put("/api/labels/1")
+        mockMvc.perform(put("/api/v1/labels/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))
                 .andExpect(status().isOk())
@@ -102,7 +102,7 @@ class LabelControllerTest {
 
     @Test
     void shouldDeleteLabel() throws Exception {
-        mockMvc.perform(delete("/api/labels/1"))
+        mockMvc.perform(delete("/api/v1/labels/1"))
                 .andExpect(status().isNoContent())
                 .andExpect(content().string(""));
 
@@ -111,7 +111,7 @@ class LabelControllerTest {
 
     @Test
     void shouldReturnValidationErrors() throws Exception {
-        mockMvc.perform(post("/api/labels")
+        mockMvc.perform(post("/api/v1/labels")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"name": " ", "color": "red"}
@@ -125,7 +125,7 @@ class LabelControllerTest {
     void shouldReturnNotFoundError() throws Exception {
         when(labelService.findById(42L)).thenThrow(new ResourceNotFoundException("Label", 42L));
 
-        mockMvc.perform(get("/api/labels/42"))
+        mockMvc.perform(get("/api/v1/labels/42"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Label with id '42' was not found"));
     }
@@ -135,7 +135,7 @@ class LabelControllerTest {
         when(labelService.create(any(CreateLabelRequest.class)))
                 .thenThrow(new ConflictException("Label already exists"));
 
-        mockMvc.perform(post("/api/labels")
+        mockMvc.perform(post("/api/v1/labels")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))
                 .andExpect(status().isConflict())

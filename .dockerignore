@@ -2,6 +2,6 @@
 .idea
 .env
 target
+**/target
 logs
 *.iml
-

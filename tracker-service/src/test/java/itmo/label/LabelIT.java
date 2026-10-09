@@ -75,7 +75,7 @@ class LabelIT {
     @Test
     void shouldPerformLabelCrudThroughHttp() {
         var createResponse = restTemplate.postForEntity(
-                "/api/labels",
+                "/api/v1/labels",
                 new CreateLabelRequest(" Backend ", "#a1b2c3"),
                 LabelResponse.class
         );
@@ -88,7 +88,7 @@ class LabelIT {
         assertThat(created.color()).isEqualTo("#A1B2C3");
 
         var getResponse = restTemplate.getForEntity(
-                "/api/labels/{id}",
+                "/api/v1/labels/{id}",
                 LabelResponse.class,
                 created.id()
         );
@@ -96,7 +96,7 @@ class LabelIT {
         assertThat(getResponse.getBody()).isEqualTo(created);
 
         var listResponse = restTemplate.getForEntity(
-                "/api/labels?page=0&size=20",
+                "/api/v1/labels?page=0&size=20",
                 LabelResponse[].class
         );
         assertThat(listResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -104,7 +104,7 @@ class LabelIT {
         assertThat(listResponse.getBody()).hasSize(1);
 
         var updateResponse = restTemplate.exchange(
-                "/api/labels/{id}",
+                "/api/v1/labels/{id}",
                 HttpMethod.PUT,
                 new HttpEntity<>(new UpdateLabelRequest("API", null)),
                 LabelResponse.class,
@@ -116,7 +116,7 @@ class LabelIT {
         assertThat(updateResponse.getBody().color()).isNull();
 
         var deleteResponse = restTemplate.exchange(
-                "/api/labels/{id}",
+                "/api/v1/labels/{id}",
                 HttpMethod.DELETE,
                 HttpEntity.EMPTY,
                 Void.class,
@@ -129,13 +129,13 @@ class LabelIT {
     @Test
     void shouldRejectDuplicateNameIgnoringCase() {
         assertThat(restTemplate.postForEntity(
-                "/api/labels",
+                "/api/v1/labels",
                 new CreateLabelRequest("Backend", null),
                 LabelResponse.class
         ).getStatusCode()).isEqualTo(HttpStatus.CREATED);
 
         var duplicateResponse = restTemplate.postForEntity(
-                "/api/labels",
+                "/api/v1/labels",
                 new CreateLabelRequest("backend", "#FFFFFF"),
                 String.class
         );
@@ -181,7 +181,7 @@ class LabelIT {
         );
 
         var response = restTemplate.exchange(
-                "/api/labels/{id}",
+                "/api/v1/labels/{id}",
                 HttpMethod.DELETE,
                 HttpEntity.EMPTY,
                 String.class,
@@ -207,7 +207,7 @@ class LabelIT {
 
     @Test
     void shouldRejectPageSizeAboveFifty() {
-        var response = restTemplate.getForEntity("/api/labels?size=51", String.class);
+        var response = restTemplate.getForEntity("/api/v1/labels?size=51", String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).contains("Request validation failed");
@@ -219,7 +219,7 @@ class LabelIT {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody())
-                .contains("/api/labels")
+                .contains("/api/v1/labels")
                 .contains("X-Total-Count")
                 .contains("LabelResponse")
                 .contains("ApiError");

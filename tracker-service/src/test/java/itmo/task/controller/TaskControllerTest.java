@@ -74,11 +74,11 @@ class TaskControllerTest {
     void shouldCreateTask() throws Exception {
         when(taskService.create(any(CreateTaskRequest.class))).thenReturn(response);
 
-        mockMvc.perform(post("/api/tasks")
+        mockMvc.perform(post("/api/v1/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validCreateRequest()))
                 .andExpect(status().isCreated())
-                .andExpect(header().string("Location", "http://localhost/api/tasks/1"))
+                .andExpect(header().string("Location", "http://localhost/api/v1/tasks/1"))
                 .andExpect(jsonPath("$.taskKey").value("PLATFORM-1"))
                 .andExpect(jsonPath("$.labelIds[0]").value(5));
     }
@@ -87,7 +87,7 @@ class TaskControllerTest {
     void shouldGetTaskById() throws Exception {
         when(taskService.findById(1L)).thenReturn(response);
 
-        mockMvc.perform(get("/api/tasks/1"))
+        mockMvc.perform(get("/api/v1/tasks/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.version").value(0));
     }
@@ -98,7 +98,7 @@ class TaskControllerTest {
         TaskFilter filter = new TaskFilter(4L, 2L, 3L, 5L, TaskStatus.TODO, TaskPriority.HIGH);
         when(taskService.findAll(filter, pageable)).thenReturn(new PageImpl<>(List.of(response), pageable, 1));
 
-        mockMvc.perform(get("/api/tasks")
+        mockMvc.perform(get("/api/v1/tasks")
                         .param("projectId", "4")
                         .param("authorId", "2")
                         .param("assigneeId", "3")
@@ -117,7 +117,7 @@ class TaskControllerTest {
         when(taskService.findFeed(null, 20))
                 .thenReturn(new TaskFeedResponse(List.of(response), 1L));
 
-        mockMvc.perform(get("/api/tasks/feed"))
+        mockMvc.perform(get("/api/v1/tasks/feed"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Next-Cursor", "1"))
                 .andExpect(jsonPath("$[0].id").value(1));
@@ -127,7 +127,7 @@ class TaskControllerTest {
     void shouldUpdateTask() throws Exception {
         when(taskService.update(any(Long.class), any(UpdateTaskRequest.class))).thenReturn(response);
 
-        mockMvc.perform(put("/api/tasks/1")
+        mockMvc.perform(put("/api/v1/tasks/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validUpdateRequest()))
                 .andExpect(status().isOk())
@@ -138,7 +138,7 @@ class TaskControllerTest {
     void shouldMoveTask() throws Exception {
         when(taskService.move(any(Long.class), any(MoveTaskRequest.class))).thenReturn(response);
 
-        mockMvc.perform(post("/api/tasks/1/move")
+        mockMvc.perform(post("/api/v1/tasks/1/move")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -154,7 +154,7 @@ class TaskControllerTest {
 
     @Test
     void shouldValidateMoveRequest() throws Exception {
-        mockMvc.perform(post("/api/tasks/1/move")
+        mockMvc.perform(post("/api/v1/tasks/1/move")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -170,7 +170,7 @@ class TaskControllerTest {
 
     @Test
     void shouldDeleteTask() throws Exception {
-        mockMvc.perform(delete("/api/tasks/1"))
+        mockMvc.perform(delete("/api/v1/tasks/1"))
                 .andExpect(status().isNoContent())
                 .andExpect(content().string(""));
 
@@ -179,7 +179,7 @@ class TaskControllerTest {
 
     @Test
     void shouldReturnValidationErrors() throws Exception {
-        mockMvc.perform(post("/api/tasks")
+        mockMvc.perform(post("/api/v1/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -201,7 +201,7 @@ class TaskControllerTest {
     void shouldReturnNotFoundError() throws Exception {
         when(taskService.findById(42L)).thenThrow(new ResourceNotFoundException("Task", 42L));
 
-        mockMvc.perform(get("/api/tasks/42"))
+        mockMvc.perform(get("/api/v1/tasks/42"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Task with id '42' was not found"));
     }
@@ -211,7 +211,7 @@ class TaskControllerTest {
         when(taskService.create(any(CreateTaskRequest.class)))
                 .thenThrow(new ConflictException("Task already exists"));
 
-        mockMvc.perform(post("/api/tasks")
+        mockMvc.perform(post("/api/v1/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validCreateRequest()))
                 .andExpect(status().isConflict())

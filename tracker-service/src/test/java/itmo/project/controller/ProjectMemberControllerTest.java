@@ -56,13 +56,13 @@ class ProjectMemberControllerTest {
     void shouldAddMember() throws Exception {
         when(memberService.add(any(Long.class), any(AddProjectMemberRequest.class))).thenReturn(response);
 
-        mockMvc.perform(post("/api/projects/1/members")
+        mockMvc.perform(post("/api/v1/projects/1/members")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"userId": 2}
                                 """))
                 .andExpect(status().isCreated())
-                .andExpect(header().string("Location", "http://localhost/api/projects/1/members/3"))
+                .andExpect(header().string("Location", "http://localhost/api/v1/projects/1/members/3"))
                 .andExpect(jsonPath("$.userId").value(2))
                 .andExpect(jsonPath("$.active").value(true));
     }
@@ -73,7 +73,7 @@ class ProjectMemberControllerTest {
         when(memberService.findAll(1L, pageable))
                 .thenReturn(new PageImpl<>(List.of(response), pageable, 1));
 
-        mockMvc.perform(get("/api/projects/1/members"))
+        mockMvc.perform(get("/api/v1/projects/1/members"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Total-Count", "1"))
                 .andExpect(jsonPath("$[0].id").value(3));
@@ -81,7 +81,7 @@ class ProjectMemberControllerTest {
 
     @Test
     void shouldDeactivateMember() throws Exception {
-        mockMvc.perform(delete("/api/projects/1/members/3"))
+        mockMvc.perform(delete("/api/v1/projects/1/members/3"))
                 .andExpect(status().isNoContent());
 
         verify(memberService).deactivate(1L, 3L);
@@ -89,7 +89,7 @@ class ProjectMemberControllerTest {
 
     @Test
     void shouldValidateMemberRequest() throws Exception {
-        mockMvc.perform(post("/api/projects/1/members")
+        mockMvc.perform(post("/api/v1/projects/1/members")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"userId": 0}

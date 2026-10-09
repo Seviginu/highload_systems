@@ -1,13 +1,13 @@
-package itmo.user.controller;
+package itmo.project.controller;
 
 import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
 import itmo.common.web.GlobalExceptionHandler;
-import itmo.user.dto.CreateUserRequest;
-import itmo.user.dto.UpdateUserRequest;
-import itmo.user.dto.UserResponse;
-import itmo.user.entity.UserRole;
-import itmo.user.service.UserService;
+import itmo.project.dto.CreateProjectRequest;
+import itmo.project.dto.ProjectResponse;
+import itmo.project.dto.UpdateProjectRequest;
+import itmo.project.entity.ProjectStatus;
+import itmo.project.service.ProjectService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,151 +37,151 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
-class UserControllerTest {
+class ProjectControllerTest {
 
     @Mock
-    private UserService userService;
+    private ProjectService projectService;
 
     private MockMvc mockMvc;
-    private UserResponse response;
+    private ProjectResponse response;
 
     @BeforeEach
     void setUp() {
-        UserController controller = new UserController(userService);
+        ProjectController controller = new ProjectController(projectService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
-        response = new UserResponse(
+        response = new ProjectResponse(
                 1L,
-                "Alice",
-                "alice@example.com",
-                UserRole.DEVELOPER,
-                Instant.parse("2026-09-22T12:00:00Z"),
-                Instant.parse("2026-09-22T12:00:00Z")
+                "Platform",
+                "PLATFORM",
+                "Main platform",
+                ProjectStatus.ACTIVE,
+                Instant.parse("2026-09-24T12:00:00Z"),
+                Instant.parse("2026-09-24T12:00:00Z")
         );
     }
 
     @Test
-    void shouldCreateUser() throws Exception {
-        when(userService.create(any(CreateUserRequest.class))).thenReturn(response);
+    void shouldCreateProject() throws Exception {
+        when(projectService.create(any(CreateProjectRequest.class))).thenReturn(response);
 
-        mockMvc.perform(post("/api/users")
+        mockMvc.perform(post("/api/v1/projects")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))
                 .andExpect(status().isCreated())
-                .andExpect(header().string("Location", "http://localhost/api/users/1"))
+                .andExpect(header().string("Location", "http://localhost/api/v1/projects/1"))
                 .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.email").value("alice@example.com"));
+                .andExpect(jsonPath("$.code").value("PLATFORM"));
     }
 
     @Test
-    void shouldGetUserById() throws Exception {
-        when(userService.findById(1L)).thenReturn(response);
+    void shouldGetProjectById() throws Exception {
+        when(projectService.findById(1L)).thenReturn(response);
 
-        mockMvc.perform(get("/api/users/1"))
+        mockMvc.perform(get("/api/v1/projects/1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Alice"))
-                .andExpect(jsonPath("$.role").value("DEVELOPER"));
+                .andExpect(jsonPath("$.name").value("Platform"))
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
     }
 
     @Test
     void shouldReturnPageAndTotalCountHeader() throws Exception {
         PageRequest pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "id"));
-        when(userService.findAll(pageable))
+        when(projectService.findAll(pageable))
                 .thenReturn(new PageImpl<>(List.of(response), pageable, 1));
 
-        mockMvc.perform(get("/api/users"))
+        mockMvc.perform(get("/api/v1/projects"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Total-Count", "1"))
                 .andExpect(jsonPath("$[0].id").value(1));
     }
 
     @Test
-    void shouldUpdateUser() throws Exception {
-        when(userService.update(any(Long.class), any(UpdateUserRequest.class))).thenReturn(response);
+    void shouldUpdateProject() throws Exception {
+        when(projectService.update(any(Long.class), any(UpdateProjectRequest.class))).thenReturn(response);
 
-        mockMvc.perform(put("/api/users/1")
+        mockMvc.perform(put("/api/v1/projects/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.email").value("alice@example.com"));
+                .andExpect(jsonPath("$.code").value("PLATFORM"));
     }
 
     @Test
-    void shouldDeleteUser() throws Exception {
-        doNothing().when(userService).delete(1L);
+    void shouldDeleteProject() throws Exception {
+        doNothing().when(projectService).delete(1L);
 
-        mockMvc.perform(delete("/api/users/1"))
+        mockMvc.perform(delete("/api/v1/projects/1"))
                 .andExpect(status().isNoContent())
                 .andExpect(content().string(""));
 
-        verify(userService).delete(1L);
+        verify(projectService).delete(1L);
     }
 
     @Test
     void shouldReturnValidationErrors() throws Exception {
-        mockMvc.perform(post("/api/users")
+        mockMvc.perform(post("/api/v1/projects")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                   "name": " ",
-                                  "email": "wrong-email",
-                                  "role": null
+                                  "code": "1-invalid",
+                                  "status": null
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Request validation failed"))
-                .andExpect(jsonPath("$.path").value("/api/users"))
-                .andExpect(jsonPath("$.fieldErrors.length()").value(3));
+                .andExpect(jsonPath("$.path").value("/api/v1/projects"))
+                .andExpect(jsonPath("$.fieldErrors.length()").value(4));
     }
 
     @Test
     void shouldReturnNotFoundError() throws Exception {
-        when(userService.findById(42L)).thenThrow(new ResourceNotFoundException("User", 42L));
+        when(projectService.findById(42L)).thenThrow(new ResourceNotFoundException("Project", 42L));
 
-        mockMvc.perform(get("/api/users/42"))
+        mockMvc.perform(get("/api/v1/projects/42"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
-                .andExpect(jsonPath("$.message").value("User with id '42' was not found"));
+                .andExpect(jsonPath("$.message").value("Project with id '42' was not found"));
     }
 
     @Test
     void shouldReturnConflictError() throws Exception {
-        when(userService.create(any(CreateUserRequest.class)))
-                .thenThrow(new ConflictException("User already exists"));
+        when(projectService.create(any(CreateProjectRequest.class)))
+                .thenThrow(new ConflictException("Project already exists"));
 
-        mockMvc.perform(post("/api/users")
+        mockMvc.perform(post("/api/v1/projects")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.message").value("User already exists"));
+                .andExpect(jsonPath("$.message").value("Project already exists"));
     }
 
     @Test
-    void shouldReturnBadRequestForMalformedBody() throws Exception {
-        mockMvc.perform(post("/api/users")
+    void shouldReturnBadRequestForMalformedStatus() throws Exception {
+        mockMvc.perform(post("/api/v1/projects")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"role\": \"UNKNOWN\"}"))
+                        .content("""
+                                {
+                                  "name": "Platform",
+                                  "code": "PLATFORM",
+                                  "status": "UNKNOWN"
+                                }
+                                """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Request body is malformed"));
-    }
-
-    @Test
-    void shouldReturnStructuredErrorForInvalidPathVariableType() throws Exception {
-        mockMvc.perform(get("/api/users/not-a-number"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.message").value("Parameter 'id' has an invalid value"))
-                .andExpect(jsonPath("$.path").value("/api/users/not-a-number"));
     }
 
     private String validRequest() {
         return """
                 {
-                  "name": "Alice",
-                  "email": "alice@example.com",
-                  "role": "DEVELOPER"
+                  "name": "Platform",
+                  "code": "PLATFORM",
+                  "description": "Main platform",
+                  "status": "ACTIVE",
+                  "teamLeadId": 1
                 }
                 """;
     }

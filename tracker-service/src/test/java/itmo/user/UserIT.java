@@ -70,7 +70,7 @@ class UserIT {
     @Test
     void shouldPerformUserCrudThroughHttp() {
         var createResponse = restTemplate.postForEntity(
-                "/api/users",
+                "/api/v1/users",
                 new CreateUserRequest("Alice", "Alice@Example.COM", UserRole.DEVELOPER),
                 UserResponse.class
         );
@@ -83,7 +83,7 @@ class UserIT {
         assertThat(created.email()).isEqualTo("alice@example.com");
 
         var getResponse = restTemplate.getForEntity(
-                "/api/users/{id}",
+                "/api/v1/users/{id}",
                 UserResponse.class,
                 created.id()
         );
@@ -91,7 +91,7 @@ class UserIT {
         assertThat(getResponse.getBody()).isEqualTo(created);
 
         var listResponse = restTemplate.getForEntity(
-                "/api/users?page=0&size=20",
+                "/api/v1/users?page=0&size=20",
                 UserResponse[].class
         );
         assertThat(listResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -99,7 +99,7 @@ class UserIT {
         assertThat(listResponse.getBody()).hasSize(1);
 
         var updateResponse = restTemplate.exchange(
-                "/api/users/{id}",
+                "/api/v1/users/{id}",
                 HttpMethod.PUT,
                 new HttpEntity<>(new UpdateUserRequest(
                         "Alice Lead",
@@ -114,7 +114,7 @@ class UserIT {
         assertThat(updateResponse.getBody().role()).isEqualTo(UserRole.TEAM_LEAD);
 
         var deleteResponse = restTemplate.exchange(
-                "/api/users/{id}",
+                "/api/v1/users/{id}",
                 HttpMethod.DELETE,
                 HttpEntity.EMPTY,
                 Void.class,
@@ -122,7 +122,7 @@ class UserIT {
         );
         assertThat(deleteResponse.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         assertThat(restTemplate.getForEntity(
-                "/api/users/{id}",
+                "/api/v1/users/{id}",
                 String.class,
                 created.id()
         ).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
@@ -131,14 +131,14 @@ class UserIT {
     @Test
     void shouldRejectDuplicateEmailIgnoringCase() {
         var firstResponse = restTemplate.postForEntity(
-                "/api/users",
+                "/api/v1/users",
                 new CreateUserRequest("Alice", "Alice@Example.COM", UserRole.DEVELOPER),
                 UserResponse.class
         );
         assertThat(firstResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
 
         var duplicateResponse = restTemplate.postForEntity(
-                "/api/users",
+                "/api/v1/users",
                 new CreateUserRequest("Another Alice", "alice@example.com", UserRole.ADMIN),
                 String.class
         );
@@ -160,14 +160,14 @@ class UserIT {
 
     @Test
     void shouldExposeUserApiInOpenApiDocument() {
-        var invalidPage = restTemplate.getForEntity("/api/users?size=51", String.class);
+        var invalidPage = restTemplate.getForEntity("/api/v1/users?size=51", String.class);
         assertThat(invalidPage.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 
         var response = restTemplate.getForEntity("/v3/api-docs", String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody())
-                .contains("/api/users")
+                .contains("/api/v1/users")
                 .contains("X-Total-Count")
                 .contains("ApiError");
     }
