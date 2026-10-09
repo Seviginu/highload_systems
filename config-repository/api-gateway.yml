@@ -1,0 +1,28 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  cloud:
+    gateway:
+      server:
+        webflux:
+          default-filters:
+            - PreserveHostHeader
+          routes:
+            - id: tracker-api
+              uri: lb://tracker-service
+              predicates:
+                - Path=/api/v1/users/**,/api/v1/projects/**,/api/v1/tasks/**,/api/v1/labels/**
+            - id: tracker-openapi
+              uri: lb://tracker-service
+              predicates:
+                - Path=/v3/api-docs/tracker-service
+              filters:
+                - SetPath=/v3/api-docs
+
+springdoc:
+  swagger-ui:
+    disable-swagger-default-url: true
+    urls:
+      - name: tracker-service
+        url: /v3/api-docs/tracker-service

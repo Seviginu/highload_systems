@@ -567,6 +567,7 @@ class TaskIT {
         var openApi = restTemplate.getForEntity("/v3/api-docs", String.class);
         assertThat(openApi.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(openApi.getBody())
+                .contains("\"servers\":[{\"url\":\"/\"}]")
                 .contains("/api/v1/users")
                 .contains("/api/v1/projects")
                 .contains("/api/v1/projects/{projectId}/members")

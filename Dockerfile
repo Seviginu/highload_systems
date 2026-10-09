@@ -6,11 +6,13 @@ COPY pom.xml .
 COPY tracker-service/pom.xml ./tracker-service/pom.xml
 COPY config-server/pom.xml ./config-server/pom.xml
 COPY discovery-server/pom.xml ./discovery-server/pom.xml
+COPY api-gateway/pom.xml ./api-gateway/pom.xml
 RUN mvn -B -pl ${SERVICE_MODULE} -am -DskipTests dependency:go-offline
 
 COPY tracker-service/src ./tracker-service/src
 COPY config-server/src ./config-server/src
 COPY discovery-server/src ./discovery-server/src
+COPY api-gateway/src ./api-gateway/src
 COPY config-repository ./config-repository
 RUN mvn -B -pl ${SERVICE_MODULE} -am -DskipTests package
 

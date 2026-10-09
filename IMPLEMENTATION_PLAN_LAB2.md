@@ -1,6 +1,6 @@
 # План реализации ЛР №2
 
-Статус: структура Maven, Config Server и Eureka реализованы; архитектурные
+Статус: структура Maven, Config Server, Eureka и Gateway реализованы; архитектурные
 решения о выделении пользователей и изменении DELETE остаются предложением.
 Основа: текущий монолит ЛР №1, ветка `main`, Java 21, Spring Boot 3.5.6,
 Maven, PostgreSQL, JPA, Liquibase, Redis, OpenAPI, JUnit и Testcontainers.
@@ -36,7 +36,32 @@ Maven, PostgreSQL, JPA, Liquibase, Redis, OpenAPI, JUnit и Testcontainers.
   Config Server. Автоматическое обновление конфигурации работающих клиентов
   на этом этапе не включено.
 
-Следующий этап — Gateway для одного бизнес-сервиса и общий Swagger UI.
+Выполнено на третьем этапе:
+
+- Добавлен `api-gateway` на Spring Cloud Gateway Server WebFlux с Config Client,
+  Eureka и Spring Cloud LoadBalancer. Маршруты и Swagger настраиваются через
+  `config-repository/api-gateway.yml`.
+- Все текущие публичные `/api/v1/users`, `/projects`, `/tasks`, `/labels`
+  и вложенные маршруты направляются в `lb://tracker-service`.
+- Общий Swagger UI размещён на Gateway; tracker-service публикует только
+  OpenAPI. Спецификация доступна через Gateway по `/v3/api-docs/tracker-service`.
+  Server URL `/` направляет запросы на тот же origin, а PreserveHostHeader
+  сохраняет внешний адрес в Location для текущего HTTP-развёртывания.
+- В Compose добавлен отдельный образ и healthcheck Gateway. Скрипт запуска
+  использует host-порт 58081; прежний прямой API трекера остаётся на 58080.
+- `mvn clean verify` на Java 21: 114 unit- и 32 integration-теста проходят;
+  покрытие строк tracker-service — 90.46%. Агрегированный отчёт ещё не добавлен.
+- Smoke-проверка: Gateway получает конфигурацию по HTTP и зарегистрирован
+  в Eureka со статусом UP; UI, JS/CSS и OpenAPI доступны. Проверены запросы
+  через Gateway: создание, чтение и удаление данных, участники проекта,
+  пагинация, feed, Location с адресом Gateway и ошибки 400/404.
+  Проверка выполняет HTTP-запросы по server URL из спецификации; интерактивное
+  нажатие Try it out в браузере отдельно не проверялось.
+- Все четыре образа собраны; временные контейнеры, сеть и volumes smoke-проекта
+  удалены после проверки. Бизнес-логика, схема БД и миграции не изменялись.
+
+Следующий этап — выделение user-service с R2DBC и Feign. До изменения
+поведения удаления пользователей подтвердить выбранную политику DELETE.
 
 ## 1. Границы сервисов
 
