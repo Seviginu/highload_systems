@@ -30,8 +30,8 @@ public class ProjectServiceImpl implements ProjectService {
     private final TransactionOperations transactions;
 
     @Override
-    public ProjectResponse create(CreateProjectRequest request) {
-        userDirectory.requireTeamLead(request.teamLeadId());
+    public ProjectResponse create(CreateProjectRequest request, String authorization) {
+        userDirectory.requireTeamLead(authorization, request.teamLeadId());
         return transactions.execute(transactionStatus -> {
             String normalizedCode = projectMapper.normalizeCode(request.code());
             ensureCodeAvailable(normalizedCode);

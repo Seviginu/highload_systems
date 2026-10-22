@@ -21,6 +21,8 @@ public class UserApiStub {
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpServer server;
     private volatile boolean unavailable;
+    private volatile int authorizationFailure;
+    private volatile String lastAuthorization;
     private volatile long delayMillis;
     private volatile CountDownLatch responseEntered;
     private volatile CountDownLatch responseRelease;
@@ -38,6 +40,7 @@ public class UserApiStub {
         }));
         server.createContext("/internal/users/resolve", exchange -> {
             requests.incrementAndGet();
+            lastAuthorization = exchange.getRequestHeaders().getFirst("Authorization");
             try {
                 if (!"POST".equals(exchange.getRequestMethod())) {
                     exchange.sendResponseHeaders(405, -1);
@@ -58,9 +61,9 @@ public class UserApiStub {
                         Thread.currentThread().interrupt();
                     }
                 }
-                int status = unavailable ? 503 : 200;
+                int status = authorizationFailure != 0 ? authorizationFailure : unavailable ? 503 : 200;
                 Object response;
-                if (unavailable) {
+                if (status != 200) {
                     response = Map.of("message", "Unavailable");
                 } else {
                     Map<Long, Map<String, Object>> found = new LinkedHashMap<>();
@@ -86,6 +89,8 @@ public class UserApiStub {
 
     public String url() { return "http://127.0.0.1:" + server.getAddress().getPort(); }
     public long requestCount() { return requests.get(); }
+    public String lastAuthorization() { return lastAuthorization; }
+    public void authorizationFailure(int value) { authorizationFailure = value; }
     public TestUser create(TestUser user) {
         user.assignId(sequence.incrementAndGet());
         users.put(user.getId(), user);
@@ -101,6 +106,7 @@ public class UserApiStub {
     public void clear() {
         requests.set(0);
         users.clear(); unavailable = false; delayMillis = 0;
+        authorizationFailure = 0; lastAuthorization = null;
         responseEntered = null; responseRelease = null;
     }
 }

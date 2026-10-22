@@ -15,5 +15,6 @@ export EUREKA_SERVER_PORT="${EUREKA_SERVER_PORT:-58761}"
 
 cd "${PROJECT_DIR}"
 
+bash "${SCRIPT_DIR}/generate-jwt-keys.sh"
 docker compose up --build -d
 docker compose ps

@@ -40,7 +40,7 @@ class LabelControllerTest {
     void setUp() {
         client = WebTestClient.bindToController(new LabelController(labelService, new BlockingOperations(Schedulers.boundedElastic())))
                 .controllerAdvice(new GlobalExceptionHandler())
-                .build();
+                .configureClient().defaultHeader("Authorization", "Bearer test-token").build();
         response = new LabelResponse(
                 1L,
                 "Backend",

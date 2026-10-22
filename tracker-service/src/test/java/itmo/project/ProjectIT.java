@@ -71,6 +71,10 @@ class ProjectIT {
 
     @BeforeEach
     void cleanDatabase() {
+        restTemplate.getRestTemplate().setInterceptors(java.util.List.of((request, body, execution) -> {
+            request.getHeaders().set("Authorization", itmo.security.TestTokens.bearer());
+            return execution.execute(request, body);
+        }));
         jdbcTemplate.update("DELETE FROM task_labels");
         jdbcTemplate.update("DELETE FROM tasks");
         projectMemberRepository.deleteAll();

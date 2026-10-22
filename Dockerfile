@@ -3,11 +3,14 @@ WORKDIR /workspace
 ARG SERVICE_MODULE=tracker-service
 
 COPY pom.xml .
+COPY security-common ./security-common
 COPY ${SERVICE_MODULE}/pom.xml ./${SERVICE_MODULE}/pom.xml
 
 COPY ${SERVICE_MODULE}/src ./${SERVICE_MODULE}/src
 COPY config-repository ./config-repository
 RUN --mount=type=cache,target=/root/.m2,sharing=locked \
+    mvn -B -N install && \
+    mvn -B -f security-common/pom.xml -DskipTests install && \
     mvn -B -f ${SERVICE_MODULE}/pom.xml -DskipTests package
 
 FROM eclipse-temurin:21-jre-alpine

@@ -105,6 +105,10 @@ class TaskIT {
 
     @BeforeEach
     void cleanDatabase() {
+        restTemplate.getRestTemplate().setInterceptors(java.util.List.of((request, body, execution) -> {
+            request.getHeaders().set("Authorization", itmo.security.TestTokens.bearer());
+            return execution.execute(request, body);
+        }));
         taskCache().clear();
         taskRepository.deleteAll();
         projectMemberRepository.deleteAll();

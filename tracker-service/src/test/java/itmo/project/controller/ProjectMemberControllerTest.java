@@ -37,7 +37,7 @@ class ProjectMemberControllerTest {
     void setUp() {
         client = WebTestClient.bindToController(new ProjectMemberController(memberService, new BlockingOperations(Schedulers.boundedElastic())))
                 .controllerAdvice(new GlobalExceptionHandler())
-                .build();
+                .configureClient().defaultHeader("Authorization", "Bearer test-token").build();
         response = new ProjectMemberResponse(
                 3L,
                 1L,
@@ -49,7 +49,7 @@ class ProjectMemberControllerTest {
 
     @Test
     void shouldAddMember() throws Exception {
-        when(memberService.add(any(Long.class), any(AddProjectMemberRequest.class))).thenReturn(response);
+        when(memberService.add(any(Long.class), any(AddProjectMemberRequest.class), org.mockito.ArgumentMatchers.anyString())).thenReturn(response);
 
         client.post().uri("http://localhost/api/v1/projects/1/members")
                         .contentType(MediaType.APPLICATION_JSON)

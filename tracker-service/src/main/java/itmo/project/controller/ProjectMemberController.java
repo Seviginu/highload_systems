@@ -94,7 +94,7 @@ public class ProjectMemberController {
             ServerWebExchange exchange
     ) {
         return blocking.call(() -> {
-            ProjectMemberResponse response = memberService.add(projectId, request);
+            ProjectMemberResponse response = memberService.add(projectId, request, exchange.getRequest().getHeaders().getFirst("Authorization"));
             URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
                     .path("/{id}")
                     .buildAndExpand(response.id())

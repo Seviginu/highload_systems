@@ -10,6 +10,7 @@ import reactor.core.publisher.Mono;
 import java.util.Set;
 
 public interface UserRepository extends ReactiveCrudRepository<User, Long> {
+    Mono<User> findByEmailIgnoreCaseAndDeletedFalse(String email);
     Mono<Boolean> existsByRoleAndDeletedFalseAndPasswordHashIsNotNull(UserRole role);
     Mono<User> findByIdAndDeletedFalse(Long id);
     Flux<User> findAllByIdInAndDeletedFalse(Set<Long> ids);

@@ -16,7 +16,13 @@ services:
       BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-Supervisor}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      JWT_ISSUER: ${JWT_ISSUER:-http://task-tracker}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-task-tracker-api}
+      JWT_TTL_SECONDS: ${JWT_TTL_SECONDS:-900}
       SERVER_PORT: 8080
+    volumes:
+      - ./.local/jwt/private.pem:/app/keys/private.pem:ro
+      - ./.local/jwt/public.pem:/app/keys/public.pem:ro
     ports:
       - "${USER_SERVICE_PORT:-8082}:8080"
     depends_on:
@@ -58,7 +64,11 @@ services:
     environment:
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
+      JWT_ISSUER: ${JWT_ISSUER:-http://task-tracker}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-task-tracker-api}
       SERVER_PORT: 8080
+    volumes:
+      - ./.local/jwt/public.pem:/app/keys/public.pem:ro
     ports:
       - "${GATEWAY_PORT:-8081}:8080"
     depends_on:
@@ -159,6 +169,8 @@ services:
     environment:
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
+      JWT_ISSUER: ${JWT_ISSUER:-http://task-tracker}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-task-tracker-api}
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-vs_lab1}
       DB_USERNAME: ${POSTGRES_USER:-vs_lab1}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-vs_lab1}
@@ -169,6 +181,8 @@ services:
       TRACKER_BLOCKING_THREADS: ${TRACKER_BLOCKING_THREADS:-10}
       TRACKER_BLOCKING_QUEUED_TASKS: ${TRACKER_BLOCKING_QUEUED_TASKS:-100}
       SERVER_PORT: 8080
+    volumes:
+      - ./.local/jwt/public.pem:/app/keys/public.pem:ro
     ports:
       - "${SERVER_PORT:-8080}:8080"
     depends_on:

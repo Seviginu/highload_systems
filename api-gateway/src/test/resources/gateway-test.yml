@@ -1,0 +1,20 @@
+spring:
+  cloud:
+    config:
+      enabled: false
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: test-api
+              uri: http://127.0.0.1:1
+              predicates:
+                - Path=/api/v1/**
+eureka:
+  client:
+    enabled: false
+app:
+  jwt:
+    public-key: classpath:keys/test-public.pem
+    issuer: http://task-tracker
+    audience: task-tracker-api

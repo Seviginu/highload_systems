@@ -37,6 +37,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -92,7 +93,7 @@ public class TaskController {
     @ResponseStatus(HttpStatus.CREATED)
     public Mono<TaskResponse> create(@Valid @RequestBody CreateTaskRequest request, ServerWebExchange exchange) {
         return blocking.call(() -> {
-            TaskResponse response = taskService.create(request);
+            TaskResponse response = taskService.create(request, exchange.getRequest().getHeaders().getFirst("Authorization"));
             URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
                     .path("/{id}")
                     .buildAndExpand(response.id())
@@ -225,9 +226,10 @@ public class TaskController {
     public Mono<TaskResponse> update(
             @Parameter(description = "Task identifier", example = "1")
             @PathVariable Long id,
-            @Valid @RequestBody UpdateTaskRequest request
+            @Valid @RequestBody UpdateTaskRequest request,
+            @RequestHeader("Authorization") String authorization
     ) {
-        return blocking.call(() -> taskService.update(id, request));
+        return blocking.call(() -> taskService.update(id, request, authorization));
     }
 
     @PostMapping("/{id}/move")
@@ -255,9 +257,10 @@ public class TaskController {
     public Mono<TaskResponse> move(
             @Parameter(description = "Task identifier", example = "1")
             @PathVariable Long id,
-            @Valid @RequestBody MoveTaskRequest request
+            @Valid @RequestBody MoveTaskRequest request,
+            @RequestHeader("Authorization") String authorization
     ) {
-        return blocking.call(() -> taskService.move(id, request));
+        return blocking.call(() -> taskService.move(id, request, authorization));
     }
 
     @DeleteMapping("/{id}")

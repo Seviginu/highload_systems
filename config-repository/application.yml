@@ -21,3 +21,9 @@ management:
 info:
   app:
     configuration-source: config-server
+
+app:
+  jwt:
+    public-key: ${JWT_PUBLIC_KEY:file:/app/keys/public.pem}
+    issuer: ${JWT_ISSUER:http://task-tracker}
+    audience: ${JWT_AUDIENCE:task-tracker-api}

@@ -64,9 +64,14 @@ class UserIT {
     private UserService service;
     @Autowired
     private Validator validator;
+    @Autowired
+    private itmo.user.service.PasswordService passwordService;
+    @Autowired
+    private itmo.user.mapper.UserMapper mapper;
 
     @BeforeEach
     void cleanDatabase() {
+        client = client.mutate().defaultHeader("Authorization", itmo.security.TestTokens.bearer()).build();
         users.deleteAll().block();
     }
 
@@ -221,13 +226,13 @@ class UserIT {
     void shouldBootstrapAdminOnceWithoutResettingCredentials() {
         // An old ADMIN without credentials must not prevent initial setup.
         users.save(new User("Legacy", "legacy@example.com", UserRole.ADMIN)).block();
-        var bootstrap = new AdminBootstrap(users, service, validator,
+        var bootstrap = new AdminBootstrap(users, passwordService, mapper, validator,
                 "Supervisor", "supervisor@example.com", "Bootstrap-password-123");
         bootstrap.run(null);
         var admin = users.findAll().filter(u -> u.getEmail().equals("supervisor@example.com")).blockFirst();
         assertThat(admin.getRole()).isEqualTo(UserRole.ADMIN);
         assertThat(passwords.matches("Bootstrap-password-123", admin.getPasswordHash())).isTrue();
-        new AdminBootstrap(users, service, validator,
+        new AdminBootstrap(users, passwordService, mapper, validator,
                 "Changed", "other@example.com", "Different-password-123").run(null);
         assertThat(users.count().block()).isEqualTo(2);
         var unchanged = users.findById(admin.getId()).block();
@@ -238,7 +243,7 @@ class UserIT {
     @Test
     void shouldNeverPromoteExistingBootstrapEmail() {
         var existing = users.save(new User("Existing", "supervisor@example.com", UserRole.DEVELOPER)).block();
-        var bootstrap = new AdminBootstrap(users, service, validator,
+        var bootstrap = new AdminBootstrap(users, passwordService, mapper, validator,
                 "Supervisor", "supervisor@example.com", "Bootstrap-password-123");
         StepVerifier.create(bootstrap.initialize()).expectError(itmo.common.exception.ConflictException.class).verify();
         var unchanged = users.findById(existing.getId()).block();
@@ -249,13 +254,107 @@ class UserIT {
 
     @Test
     void shouldRejectInvalidBootstrapConfigurationWithoutExposingPassword() {
-        var bootstrap = new AdminBootstrap(users, service, validator,
+        var bootstrap = new AdminBootstrap(users, passwordService, mapper, validator,
                 "Supervisor", "invalid", "short");
         StepVerifier.create(bootstrap.initialize()).expectErrorSatisfies(error -> {
             assertThat(error).isInstanceOf(IllegalStateException.class);
             assertThat(error.getMessage()).isEqualTo("Invalid bootstrap admin configuration");
         }).verify();
         assertThat(users.count().block()).isZero();
+    }
+
+    @Test
+    void shouldLoginWithRealJwtAndGetCurrentProfile() {
+        var created = create("Alice", "alice@example.com", UserRole.DEVELOPER);
+        var response = anonymous().post().uri("/api/v1/auth/login")
+                .bodyValue(new itmo.user.dto.LoginRequest("ALICE@EXAMPLE.COM", "Test-password-123"))
+                .exchange().expectStatus().isOk().expectBody(itmo.user.dto.TokenResponse.class)
+                .returnResult().getResponseBody();
+        assertThat(response.tokenType()).isEqualTo("Bearer");
+        assertThat(response.expiresIn()).isEqualTo(900);
+        anonymous().get().uri("/api/v1/auth/me").header("Authorization", "Bearer " + response.accessToken())
+                .exchange().expectStatus().isOk().expectBody()
+                .jsonPath("$.id").isEqualTo(created.id()).jsonPath("$.passwordHash").doesNotExist()
+                .jsonPath("$.password").doesNotExist();
+    }
+
+    @Test
+    void shouldRejectMissingWrongDeletedAndUninitializedCredentialsIdentically() {
+        var removed = create("Removed", "removed@example.com", UserRole.DEVELOPER);
+        client.delete().uri("/api/v1/users/{id}", removed.id()).exchange().expectStatus().isNoContent();
+        users.save(new User("Legacy", "legacy@example.com", UserRole.DEVELOPER)).block();
+        create("Active", "active@example.com", UserRole.DEVELOPER);
+        for (String email : new String[]{"missing@example.com", "removed@example.com", "legacy@example.com", "active@example.com"}) {
+            anonymous().post().uri("/api/v1/auth/login")
+                    .bodyValue(new itmo.user.dto.LoginRequest(email, "wrong-password"))
+                    .exchange().expectStatus().isUnauthorized().expectBody()
+                    .jsonPath("$.message").isEqualTo("Invalid email or password")
+                    .jsonPath("$.password").doesNotExist();
+        }
+    }
+
+    @Test
+    void shouldRestrictUserManagementToSupervisorIncludingPasswordAssignment() {
+        var created = create("Alice", "alice@example.com", UserRole.DEVELOPER);
+        String hash = users.findById(created.id()).block().getPasswordHash();
+        for (String role : new String[]{"TEAM_LEAD", "DEVELOPER"}) {
+            var restricted = anonymous().mutate().defaultHeader("Authorization", itmo.security.TestTokens.bearer(created.id(), role)).build();
+            restricted.get().uri("/api/v1/users").exchange().expectStatus().isForbidden();
+            restricted.get().uri("/api/v1/users/{id}", created.id()).exchange().expectStatus().isForbidden();
+            restricted.post().uri("/api/v1/users")
+                    .bodyValue(new CreateUserRequest("Admin", "new@example.com", UserRole.ADMIN, "Test-password-123"))
+                    .exchange().expectStatus().isForbidden().expectBody().jsonPath("$.status").isEqualTo(403);
+            restricted.put().uri("/api/v1/users/{id}", created.id())
+                    .bodyValue(new UpdateUserRequest("Admin", "alice@example.com", UserRole.ADMIN))
+                    .exchange().expectStatus().isForbidden();
+            restricted.put().uri("/api/v1/users/{id}/password", created.id())
+                    .bodyValue(new itmo.user.dto.PasswordRequest("Changed-password-123"))
+                    .exchange().expectStatus().isForbidden();
+            restricted.delete().uri("/api/v1/users/{id}", created.id()).exchange().expectStatus().isForbidden();
+        }
+        assertThat(users.count().block()).isEqualTo(1);
+        var unchanged = users.findById(created.id()).block();
+        assertThat(unchanged.getPasswordHash()).isEqualTo(hash);
+        assertThat(unchanged.getRole()).isEqualTo(UserRole.DEVELOPER);
+    }
+
+    @Test
+    void shouldLetSupervisorInitializeLegacyPasswordAndReplaceIt() {
+        var legacy = users.save(new User("Legacy", "legacy@example.com", UserRole.DEVELOPER)).block();
+        for (String password : new String[]{"First-password-123", "Second-password-123"}) {
+            client.put().uri("/api/v1/users/{id}/password", legacy.getId())
+                    .bodyValue(new itmo.user.dto.PasswordRequest(password)).exchange().expectStatus().isNoContent();
+            anonymous().post().uri("/api/v1/auth/login")
+                    .bodyValue(new itmo.user.dto.LoginRequest(legacy.getEmail(), password))
+                    .exchange().expectStatus().isOk();
+        }
+        anonymous().post().uri("/api/v1/auth/login")
+                .bodyValue(new itmo.user.dto.LoginRequest(legacy.getEmail(), "First-password-123"))
+                .exchange().expectStatus().isUnauthorized();
+        client.put().uri("/api/v1/users/{id}/password", legacy.getId())
+                .bodyValue(new itmo.user.dto.PasswordRequest("short")).exchange().expectStatus().isBadRequest();
+        client.put().uri("/api/v1/users/999999/password")
+                .bodyValue(new itmo.user.dto.PasswordRequest("Valid-password-123")).exchange().expectStatus().isNotFound();
+    }
+
+    @Test
+    void shouldRequireJwtForBothPublicBusinessAndInternalApi() {
+        anonymous().get().uri("/api/v1/users").exchange().expectStatus().isUnauthorized()
+                .expectHeader().valueEquals("WWW-Authenticate", "Bearer")
+                .expectBody().jsonPath("$.status").isEqualTo(401);
+        anonymous().post().uri("/internal/users/resolve").bodyValue(Map.of("ids", new Long[]{1L}))
+                .exchange().expectStatus().isUnauthorized();
+        anonymous().get().uri("/api/v1/auth/me").header("Authorization", "Bearer invalid")
+                .exchange().expectStatus().isUnauthorized();
+        anonymous().get().uri("/actuator/health/readiness").exchange().expectStatus().isOk();
+        anonymous().get().uri("/v3/api-docs").exchange().expectStatus().isOk().expectBody()
+                .jsonPath("$.components.securitySchemes.bearerAuth.scheme").isEqualTo("bearer");
+        StepVerifier.create(service.count())
+                .expectError(org.springframework.security.access.AccessDeniedException.class).verify();
+    }
+
+    private WebTestClient anonymous() {
+        return client.mutate().defaultHeaders(headers -> headers.remove("Authorization")).build();
     }
 
     private UserResponse create(String name, String email, UserRole role) {

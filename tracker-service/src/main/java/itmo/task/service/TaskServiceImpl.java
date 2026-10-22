@@ -51,8 +51,8 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @CachePut(cacheNames = TASKS_CACHE, key = "#result.id()")
-    public TaskResponse create(CreateTaskRequest request) {
-        userDirectory.requireUsers(request.authorId(), request.assigneeId());
+    public TaskResponse create(CreateTaskRequest request, String authorization) {
+        userDirectory.requireUsers(authorization, request.authorId(), request.assigneeId());
         return transactions.execute(transactionStatus -> {
             String normalizedKey = taskMapper.normalizeTaskKey(request.taskKey());
             ensureTaskKeyAvailable(normalizedKey);
@@ -114,8 +114,8 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @CachePut(cacheNames = TASKS_CACHE, key = "#id")
-    public TaskResponse move(Long id, MoveTaskRequest request) {
-        userDirectory.requireUsers(request.assigneeId());
+    public TaskResponse move(Long id, MoveTaskRequest request, String authorization) {
+        userDirectory.requireUsers(authorization, request.assigneeId());
         return transactions.execute(transactionStatus -> {
             Task task = findEntity(id);
             if (!Objects.equals(task.getVersion(), request.version())) {
@@ -143,12 +143,12 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @CachePut(cacheNames = TASKS_CACHE, key = "#id")
-    public TaskResponse update(Long id, UpdateTaskRequest request) {
+    public TaskResponse update(Long id, UpdateTaskRequest request, String authorization) {
         TaskResponse current = transactions.execute(status -> taskMapper.toResponse(findEntity(id)));
         if (!Objects.equals(current.version(), request.version())) {
             throw versionConflict(id);
         }
-        userDirectory.requireUsers(
+        userDirectory.requireUsers(authorization,
                 Objects.equals(current.authorId(), request.authorId()) ? null : request.authorId(),
                 Objects.equals(current.assigneeId(), request.assigneeId()) ? null : request.assigneeId());
         return transactions.execute(transactionStatus -> {

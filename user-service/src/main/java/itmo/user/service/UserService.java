@@ -4,6 +4,7 @@ import itmo.user.dto.CreateUserRequest;
 import itmo.user.dto.UpdateUserRequest;
 import itmo.user.dto.UserResponse;
 import itmo.user.dto.UserReference;
+import itmo.user.dto.PasswordRequest;
 import org.springframework.data.domain.Pageable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -17,5 +18,6 @@ public interface UserService {
     Mono<Long> count();
     Mono<UserResponse> update(Long id, UpdateUserRequest request);
     Mono<Void> delete(Long id);
+    Mono<Void> changePassword(Long id, PasswordRequest request);
     Flux<UserReference> resolve(Set<Long> ids);
 }
