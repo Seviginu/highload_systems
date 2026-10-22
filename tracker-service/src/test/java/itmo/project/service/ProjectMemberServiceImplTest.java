@@ -50,7 +50,7 @@ class ProjectMemberServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        memberService = new ProjectMemberServiceImpl(
+        memberService = new ProjectMemberServiceImpl(itmo.support.TestActors.access(),
                 memberRepository,
                 projectRepository,
                 userDirectory,
@@ -70,7 +70,7 @@ class ProjectMemberServiceImplTest {
         when(memberRepository.saveAndFlush(any(ProjectMember.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = memberService.add(1L, new AddProjectMemberRequest(2L), "Bearer test-token");
+        var response = memberService.add(1L, new AddProjectMemberRequest(2L), itmo.support.TestActors.admin());
 
         assertThat(response.projectId()).isEqualTo(1L);
         assertThat(response.userId()).isEqualTo(2L);
@@ -84,7 +84,7 @@ class ProjectMemberServiceImplTest {
         when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.of(existing));
         AddProjectMemberRequest request = new AddProjectMemberRequest(2L);
 
-        assertThatThrownBy(() -> memberService.add(1L, request, "Bearer test-token"))
+        assertThatThrownBy(() -> memberService.add(1L, request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("already an active member");
         verify(memberRepository, never()).saveAndFlush(existing);
@@ -98,7 +98,7 @@ class ProjectMemberServiceImplTest {
         when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.of(existing));
         when(memberRepository.saveAndFlush(existing)).thenReturn(existing);
 
-        var response = memberService.add(1L, new AddProjectMemberRequest(2L), "Bearer test-token");
+        var response = memberService.add(1L, new AddProjectMemberRequest(2L), itmo.support.TestActors.admin());
 
         assertThat(response.active()).isTrue();
     }
@@ -131,7 +131,7 @@ class ProjectMemberServiceImplTest {
         when(memberRepository.findByIdAndProjectId(3L, 1L)).thenReturn(Optional.of(member));
         when(memberRepository.saveAndFlush(member)).thenReturn(member);
 
-        memberService.deactivate(1L, 3L);
+        memberService.deactivate(1L, 3L, itmo.support.TestActors.admin());
 
         assertThat(member.isActive()).isFalse();
         verify(memberRepository).saveAndFlush(member);

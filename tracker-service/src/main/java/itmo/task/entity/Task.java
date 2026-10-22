@@ -156,6 +156,10 @@ public class Task {
         replaceLabels(labels);
     }
 
+    public void changeStatus(TaskStatus status) {
+        this.status = status;
+    }
+
     public void move(Project project, Long assigneeId, Set<Label> labels) {
         if (this.project != project) {
             this.project.removeTask(this);

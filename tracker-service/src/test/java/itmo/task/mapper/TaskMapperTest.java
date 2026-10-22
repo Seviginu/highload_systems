@@ -46,7 +46,6 @@ class TaskMapperTest {
                         " Description ",
                         TaskStatus.TODO,
                         TaskPriority.HIGH,
-                        2L,
                         3L,
                         1L,
                         Set.of(4L)
@@ -76,8 +75,7 @@ class TaskMapperTest {
     void shouldReplaceProjectLabelsAndOptionalAssignee() {
         Task task = mapper.toEntity(
                 new CreateTaskRequest(
-                        "PLATFORM-1", "Old", null, TaskStatus.TODO, TaskPriority.LOW,
-                        2L, 3L, 1L, Set.of(4L)
+                        "PLATFORM-1", "Old", null, TaskStatus.TODO, TaskPriority.LOW, 3L, 1L, Set.of(4L)
                 ),
                 author.getId(),
                 assignee.getId(),
@@ -92,8 +90,7 @@ class TaskMapperTest {
         mapper.updateEntity(
                 task,
                 new UpdateTaskRequest(
-                        "core-2", " New ", " ", TaskStatus.IN_PROGRESS, TaskPriority.CRITICAL,
-                        2L, null, 6L, Set.of(7L), 0L
+                        "core-2", " New ", " ", TaskStatus.IN_PROGRESS, TaskPriority.CRITICAL, null, 6L, Set.of(7L), 0L
                 ),
                 author.getId(),
                 null,

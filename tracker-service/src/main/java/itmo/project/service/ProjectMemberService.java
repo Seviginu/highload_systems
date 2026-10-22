@@ -1,5 +1,6 @@
 package itmo.project.service;
 
+import itmo.infrastructure.security.CurrentUser;
 import itmo.project.dto.AddProjectMemberRequest;
 import itmo.project.dto.ProjectMemberResponse;
 import org.springframework.data.domain.Page;
@@ -7,7 +8,7 @@ import org.springframework.data.domain.Pageable;
 
 public interface ProjectMemberService {
 
-    ProjectMemberResponse add(Long projectId, AddProjectMemberRequest request, String authorization);
+    ProjectMemberResponse add(Long projectId, AddProjectMemberRequest request, CurrentUser actor);
 
     @SuppressWarnings("UnusedReturnValue")
     ProjectMemberResponse assignValidatedTeamLead(Long projectId, Long userId);
@@ -16,5 +17,5 @@ public interface ProjectMemberService {
 
     boolean isActiveMember(Long projectId, Long userId);
 
-    void deactivate(Long projectId, Long memberId);
+    void deactivate(Long projectId, Long memberId, CurrentUser actor);
 }

@@ -1,5 +1,6 @@
 package itmo.project.controller;
 
+import itmo.infrastructure.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -93,15 +94,15 @@ public class ProjectMemberController {
             @Valid @RequestBody AddProjectMemberRequest request,
             ServerWebExchange exchange
     ) {
-        return blocking.call(() -> {
-            ProjectMemberResponse response = memberService.add(projectId, request, exchange.getRequest().getHeaders().getFirst("Authorization"));
+        return CurrentUser.current().flatMap(actor -> blocking.call(() -> {
+            ProjectMemberResponse response = memberService.add(projectId, request, actor);
             URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
                     .path("/{id}")
                     .buildAndExpand(response.id())
                     .toUri();
             exchange.getResponse().getHeaders().setLocation(location);
             return response;
-        });
+        }));
     }
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
@@ -155,6 +156,6 @@ public class ProjectMemberController {
             @Parameter(description = "Project membership identifier", example = "1")
             @PathVariable Long memberId
     ) {
-        return blocking.run(() -> memberService.deactivate(projectId, memberId));
+        return CurrentUser.current().flatMap(actor -> blocking.run(() -> memberService.deactivate(projectId, memberId, actor)));
     }
 }

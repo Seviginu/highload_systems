@@ -1,5 +1,6 @@
 package itmo.project.controller;
 
+import itmo.infrastructure.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -80,15 +81,15 @@ public class ProjectController {
     )
     @ResponseStatus(HttpStatus.CREATED)
     public Mono<ProjectResponse> create(@Valid @RequestBody CreateProjectRequest request, ServerWebExchange exchange) {
-        return blocking.call(() -> {
-            ProjectResponse response = projectService.create(request, exchange.getRequest().getHeaders().getFirst("Authorization"));
+        return CurrentUser.current().flatMap(actor -> blocking.call(() -> {
+            ProjectResponse response = projectService.create(request, actor);
             URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
                     .path("/{id}")
                     .buildAndExpand(response.id())
                     .toUri();
             exchange.getResponse().getHeaders().setLocation(location);
             return response;
-        });
+        }));
     }
 
     @GetMapping("/{id}")
@@ -170,7 +171,7 @@ public class ProjectController {
             @PathVariable Long id,
             @Valid @RequestBody UpdateProjectRequest request
     ) {
-        return blocking.call(() -> projectService.update(id, request));
+        return CurrentUser.current().flatMap(actor -> blocking.call(() -> projectService.update(id, request, actor)));
     }
 
     @DeleteMapping("/{id}")
@@ -191,6 +192,6 @@ public class ProjectController {
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long id
     ) {
-        return blocking.run(() -> projectService.delete(id));
+        return CurrentUser.current().flatMap(actor -> blocking.run(() -> projectService.delete(id, actor)));
     }
 }

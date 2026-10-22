@@ -1,5 +1,6 @@
 package itmo.label.controller;
 
+import itmo.infrastructure.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -80,15 +81,15 @@ public class LabelController {
     )
     @ResponseStatus(HttpStatus.CREATED)
     public Mono<LabelResponse> create(@Valid @RequestBody CreateLabelRequest request, ServerWebExchange exchange) {
-        return blocking.call(() -> {
-            LabelResponse response = labelService.create(request);
+        return CurrentUser.current().flatMap(actor -> blocking.call(() -> {
+            LabelResponse response = labelService.create(request, actor);
             URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
                     .path("/{id}")
                     .buildAndExpand(response.id())
                     .toUri();
             exchange.getResponse().getHeaders().setLocation(location);
             return response;
-        });
+        }));
     }
 
     @GetMapping("/{id}")
@@ -170,7 +171,7 @@ public class LabelController {
             @PathVariable Long id,
             @Valid @RequestBody UpdateLabelRequest request
     ) {
-        return blocking.call(() -> labelService.update(id, request));
+        return CurrentUser.current().flatMap(actor -> blocking.call(() -> labelService.update(id, request, actor)));
     }
 
     @DeleteMapping("/{id}")
@@ -191,6 +192,6 @@ public class LabelController {
             @Parameter(description = "Label identifier", example = "1")
             @PathVariable Long id
     ) {
-        return blocking.run(() -> labelService.delete(id));
+        return CurrentUser.current().flatMap(actor -> blocking.run(() -> labelService.delete(id, actor)));
     }
 }

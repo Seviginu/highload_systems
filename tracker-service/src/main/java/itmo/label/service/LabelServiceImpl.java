@@ -1,5 +1,7 @@
 package itmo.label.service;
 
+import itmo.infrastructure.security.CurrentUser;
+import itmo.infrastructure.security.TrackerAccess;
 import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
 import itmo.label.dto.CreateLabelRequest;
@@ -25,12 +27,15 @@ import static itmo.common.persistence.ConstraintViolationDetector.isViolationOf;
 @RequiredArgsConstructor
 public class LabelServiceImpl implements LabelService {
 
+    private final TrackerAccess access;
+
     private final LabelRepository labelRepository;
     private final LabelMapper labelMapper;
 
     @Override
     @Transactional
-    public LabelResponse create(CreateLabelRequest request) {
+    public LabelResponse create(CreateLabelRequest request, CurrentUser actor) {
+        access.requireAdmin(actor);
         String normalizedName = labelMapper.normalizeName(request.name());
         ensureNameAvailable(normalizedName);
 
@@ -77,7 +82,8 @@ public class LabelServiceImpl implements LabelService {
 
     @Override
     @Transactional
-    public LabelResponse update(Long id, UpdateLabelRequest request) {
+    public LabelResponse update(Long id, UpdateLabelRequest request, CurrentUser actor) {
+        access.requireAdmin(actor);
         Label label = findEntity(id);
         String normalizedName = labelMapper.normalizeName(request.name());
 
@@ -98,7 +104,8 @@ public class LabelServiceImpl implements LabelService {
 
     @Override
     @Transactional
-    public void delete(Long id) {
+    public void delete(Long id, CurrentUser actor) {
+        access.requireAdmin(actor);
         Label label = findEntity(id);
         try {
             labelRepository.delete(label);

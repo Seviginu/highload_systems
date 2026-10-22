@@ -42,6 +42,7 @@ class ProjectControllerTest {
     void setUp() {
         ProjectController controller = new ProjectController(projectService, new BlockingOperations(Schedulers.boundedElastic()));
         client = WebTestClient.bindToController(controller)
+                .webFilter(itmo.support.TestActors.context())
                 .controllerAdvice(new GlobalExceptionHandler())
                 .configureClient().defaultHeader("Authorization", "Bearer test-token").build();
         response = new ProjectResponse(
@@ -57,7 +58,7 @@ class ProjectControllerTest {
 
     @Test
     void shouldCreateProject() throws Exception {
-        when(projectService.create(any(CreateProjectRequest.class), org.mockito.ArgumentMatchers.anyString())).thenReturn(response);
+        when(projectService.create(any(CreateProjectRequest.class), org.mockito.ArgumentMatchers.any(itmo.infrastructure.security.CurrentUser.class))).thenReturn(response);
 
         client.post().uri("http://localhost/api/v1/projects")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -92,7 +93,7 @@ class ProjectControllerTest {
 
     @Test
     void shouldUpdateProject() throws Exception {
-        when(projectService.update(any(Long.class), any(UpdateProjectRequest.class))).thenReturn(response);
+        when(projectService.update(any(Long.class), any(UpdateProjectRequest.class), org.mockito.ArgumentMatchers.any(itmo.infrastructure.security.CurrentUser.class))).thenReturn(response);
 
         client.put().uri("http://localhost/api/v1/projects/1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -103,13 +104,13 @@ class ProjectControllerTest {
 
     @Test
     void shouldDeleteProject() throws Exception {
-        doNothing().when(projectService).delete(1L);
+        doNothing().when(projectService).delete(1L, itmo.support.TestActors.admin());
 
         client.delete().uri("/api/v1/projects/1").exchange()
                 .expectStatus().isNoContent()
                 .expectBody().isEmpty();
 
-        verify(projectService).delete(1L);
+        verify(projectService).delete(1L, itmo.support.TestActors.admin());
     }
 
     @Test
@@ -141,7 +142,7 @@ class ProjectControllerTest {
 
     @Test
     void shouldReturnConflictError() throws Exception {
-        when(projectService.create(any(CreateProjectRequest.class), org.mockito.ArgumentMatchers.anyString()))
+        when(projectService.create(any(CreateProjectRequest.class), org.mockito.ArgumentMatchers.any(itmo.infrastructure.security.CurrentUser.class)))
                 .thenThrow(new ConflictException("Project already exists"));
 
         client.post().uri("http://localhost/api/v1/projects")

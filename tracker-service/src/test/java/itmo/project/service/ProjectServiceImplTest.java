@@ -47,7 +47,7 @@ class ProjectServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        projectService = new ProjectServiceImpl(projectRepository, new ProjectMapper(), projectMemberService, userDirectory, new TestTransactions());
+        projectService = new ProjectServiceImpl(itmo.support.TestActors.access(), projectRepository, new ProjectMapper(), projectMemberService, userDirectory, new TestTransactions());
     }
 
     @Test
@@ -56,7 +56,7 @@ class ProjectServiceImplTest {
         when(projectRepository.existsByCode("PLATFORM")).thenReturn(false);
         when(projectRepository.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = projectService.create(request, "Bearer test-token");
+        var response = projectService.create(request, itmo.support.TestActors.admin());
 
         assertThat(response.name()).isEqualTo("Platform");
         assertThat(response.code()).isEqualTo("PLATFORM");
@@ -69,7 +69,7 @@ class ProjectServiceImplTest {
         CreateProjectRequest request = request("Platform", "platform");
         when(projectRepository.existsByCode("PLATFORM")).thenReturn(true);
 
-        assertThatThrownBy(() -> projectService.create(request, "Bearer test-token"))
+        assertThatThrownBy(() -> projectService.create(request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("PLATFORM");
         verify(projectRepository, never()).saveAndFlush(any(Project.class));
@@ -82,7 +82,7 @@ class ProjectServiceImplTest {
         when(projectRepository.saveAndFlush(any(Project.class)))
                 .thenThrow(new DataIntegrityViolationException("uq_projects_code"));
 
-        assertThatThrownBy(() -> projectService.create(request, "Bearer test-token"))
+        assertThatThrownBy(() -> projectService.create(request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("PLATFORM");
     }
@@ -122,7 +122,7 @@ class ProjectServiceImplTest {
         when(projectRepository.existsByCodeAndIdNot("PLATFORM_CORE", 1L)).thenReturn(false);
         when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
-        var response = projectService.update(1L, request);
+        var response = projectService.update(1L, request, itmo.support.TestActors.admin());
 
         assertThat(response.name()).isEqualTo("Platform Core");
         assertThat(response.code()).isEqualTo("PLATFORM_CORE");
@@ -141,7 +141,7 @@ class ProjectServiceImplTest {
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
         when(projectRepository.existsByCodeAndIdNot("BUSY", 1L)).thenReturn(true);
 
-        assertThatThrownBy(() -> projectService.update(1L, request))
+        assertThatThrownBy(() -> projectService.update(1L, request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("BUSY");
         verify(projectRepository, never()).saveAndFlush(project);
@@ -161,7 +161,7 @@ class ProjectServiceImplTest {
         when(projectRepository.saveAndFlush(project))
                 .thenThrow(new DataIntegrityViolationException("uq_projects_code"));
 
-        assertThatThrownBy(() -> projectService.update(1L, request))
+        assertThatThrownBy(() -> projectService.update(1L, request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("PLATFORM_2");
     }
@@ -171,7 +171,7 @@ class ProjectServiceImplTest {
         Project project = project(ProjectStatus.PLANNED);
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
 
-        projectService.delete(1L);
+        projectService.delete(1L, itmo.support.TestActors.admin());
 
         verify(projectRepository).delete(project);
         verify(projectRepository).flush();
@@ -184,7 +184,7 @@ class ProjectServiceImplTest {
         doThrow(new DataIntegrityViolationException("fk_tasks_project"))
                 .when(projectRepository).flush();
 
-        assertThatThrownBy(() -> projectService.delete(1L))
+        assertThatThrownBy(() -> projectService.delete(1L, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("referenced");
     }

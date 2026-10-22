@@ -105,7 +105,11 @@ public class UserApiStub {
     }
     public void clear() {
         requests.set(0);
-        users.clear(); unavailable = false; delayMillis = 0;
+        users.clear();
+        var supervisor = new TestUser("ADMIN");
+        supervisor.assignId(1L);
+        users.put(1L, supervisor);
+        unavailable = false; delayMillis = 0;
         authorizationFailure = 0; lastAuthorization = null;
         responseEntered = null; responseRelease = null;
     }

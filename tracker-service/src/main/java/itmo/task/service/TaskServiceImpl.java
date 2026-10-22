@@ -1,5 +1,7 @@
 package itmo.task.service;
 
+import itmo.infrastructure.security.CurrentUser;
+import itmo.infrastructure.security.TrackerAccess;
 import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
 import itmo.label.entity.Label;
@@ -8,6 +10,7 @@ import itmo.project.entity.Project;
 import itmo.project.service.ProjectMemberService;
 import itmo.project.service.ProjectService;
 import itmo.task.dto.CreateTaskRequest;
+import itmo.task.dto.ChangeTaskStatusRequest;
 import itmo.task.dto.MoveTaskRequest;
 import itmo.task.dto.TaskFeedResponse;
 import itmo.task.dto.TaskFilter;
@@ -41,6 +44,8 @@ import static itmo.infrastructure.cache.TaskCacheConfiguration.TASKS_CACHE;
 @RequiredArgsConstructor
 public class TaskServiceImpl implements TaskService {
 
+    private final TrackerAccess access;
+
     private final TaskRepository taskRepository;
     private final TaskMapper taskMapper;
     private final ProjectService projectService;
@@ -51,15 +56,18 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @CachePut(cacheNames = TASKS_CACHE, key = "#result.id()")
-    public TaskResponse create(CreateTaskRequest request, String authorization) {
-        userDirectory.requireUsers(authorization, request.authorId(), request.assigneeId());
+    public TaskResponse create(CreateTaskRequest request, CurrentUser actor) {
+        access.requireManager(actor);
+        userDirectory.requireUsers(actor.authorization(), actor.id(), request.assigneeId());
         return transactions.execute(transactionStatus -> {
+            access.requireProjectManager(request.projectId(), actor);
             String normalizedKey = taskMapper.normalizeTaskKey(request.taskKey());
             ensureTaskKeyAvailable(normalizedKey);
 
             Project project = resolveProject(request.projectId());
-            Long author = request.authorId();
+            Long author = actor.id();
             Long assignee = request.assigneeId();
+            requireAssigneeMember(request.projectId(), assignee);
             Set<Label> labels = resolveLabels(request.labelIds());
 
             try {
@@ -114,21 +122,19 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @CachePut(cacheNames = TASKS_CACHE, key = "#id")
-    public TaskResponse move(Long id, MoveTaskRequest request, String authorization) {
-        userDirectory.requireUsers(authorization, request.assigneeId());
+    public TaskResponse move(Long id, MoveTaskRequest request, CurrentUser actor) {
+        access.requireManager(actor);
+        userDirectory.requireUsers(actor.authorization(), request.assigneeId());
         return transactions.execute(transactionStatus -> {
             Task task = findEntity(id);
+            access.requireProjectManager(task.getProject().getId(), actor);
+            access.requireProjectManager(request.projectId(), actor);
             if (!Objects.equals(task.getVersion(), request.version())) {
                 throw versionConflict(id);
             }
             Project project = resolveProject(request.projectId());
             Long assignee = request.assigneeId();
-            if (assignee != null && !projectMemberService.isActiveMember(request.projectId(), request.assigneeId())) {
-                throw new ConflictException(
-                        "User with id '%d' is not an active member of project '%d'"
-                                .formatted(request.assigneeId(), request.projectId())
-                );
-            }
+            requireAssigneeMember(request.projectId(), assignee);
             Set<Label> labels = resolveLabels(request.labelIds());
             task.move(project, assignee, labels);
 
@@ -143,16 +149,21 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @CachePut(cacheNames = TASKS_CACHE, key = "#id")
-    public TaskResponse update(Long id, UpdateTaskRequest request, String authorization) {
-        TaskResponse current = transactions.execute(status -> taskMapper.toResponse(findEntity(id)));
+    public TaskResponse update(Long id, UpdateTaskRequest request, CurrentUser actor) {
+        access.requireManager(actor);
+        TaskResponse current = transactions.execute(status -> {
+            Task task = findEntity(id);
+            access.requireProjectManager(task.getProject().getId(), actor);
+            return taskMapper.toResponse(task);
+        });
         if (!Objects.equals(current.version(), request.version())) {
             throw versionConflict(id);
         }
-        userDirectory.requireUsers(authorization,
-                Objects.equals(current.authorId(), request.authorId()) ? null : request.authorId(),
+        userDirectory.requireUsers(actor.authorization(),
                 Objects.equals(current.assigneeId(), request.assigneeId()) ? null : request.assigneeId());
         return transactions.execute(transactionStatus -> {
             Task task = findEntity(id);
+            access.requireProjectManager(task.getProject().getId(), actor);
             if (!Objects.equals(task.getVersion(), request.version())) {
                 throw versionConflict(id);
             }
@@ -166,8 +177,9 @@ public class TaskServiceImpl implements TaskService {
             }
 
             Project project = resolveProject(request.projectId());
-            Long author = request.authorId();
+            Long author = task.getAuthorId();
             Long assignee = request.assigneeId();
+            requireAssigneeMember(request.projectId(), assignee);
             Set<Label> labels = resolveLabels(request.labelIds());
             taskMapper.updateEntity(task, request, author, assignee, project, labels);
 
@@ -188,10 +200,36 @@ public class TaskServiceImpl implements TaskService {
     @Override
     @Transactional
     @CacheEvict(cacheNames = TASKS_CACHE, key = "#id")
-    public void delete(Long id) {
+    public void delete(Long id, CurrentUser actor) {
+        access.requireManager(actor);
         Task task = findEntity(id);
+        access.requireProjectManager(task.getProject().getId(), actor);
         taskRepository.delete(task);
         taskRepository.flush();
+    }
+
+    @Override
+    @Transactional
+    @CachePut(cacheNames = TASKS_CACHE, key = "#id")
+    public TaskResponse changeStatus(Long id, ChangeTaskStatusRequest request, CurrentUser actor) {
+        Task task = findEntity(id);
+        access.requireStatusChange(task, actor);
+        if (!Objects.equals(task.getVersion(), request.version())) {
+            throw versionConflict(id);
+        }
+        task.changeStatus(request.status());
+        try {
+            return taskMapper.toResponse(taskRepository.saveAndFlush(task));
+        } catch (OptimisticLockingFailureException error) {
+            throw versionConflict(id);
+        }
+    }
+
+    private void requireAssigneeMember(Long projectId, Long assigneeId) {
+        if (assigneeId != null && !projectMemberService.isActiveMember(projectId, assigneeId)) {
+            throw new ConflictException("User with id '%d' is not an active member of project '%d'"
+                    .formatted(assigneeId, projectId));
+        }
     }
 
     private Task findEntity(Long id) {

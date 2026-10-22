@@ -39,6 +39,7 @@ class LabelControllerTest {
     @BeforeEach
     void setUp() {
         client = WebTestClient.bindToController(new LabelController(labelService, new BlockingOperations(Schedulers.boundedElastic())))
+                .webFilter(itmo.support.TestActors.context())
                 .controllerAdvice(new GlobalExceptionHandler())
                 .configureClient().defaultHeader("Authorization", "Bearer test-token").build();
         response = new LabelResponse(
@@ -51,7 +52,7 @@ class LabelControllerTest {
 
     @Test
     void shouldCreateLabel() throws Exception {
-        when(labelService.create(any(CreateLabelRequest.class))).thenReturn(response);
+        when(labelService.create(any(CreateLabelRequest.class), org.mockito.ArgumentMatchers.any(itmo.infrastructure.security.CurrentUser.class))).thenReturn(response);
 
         client.post().uri("http://localhost/api/v1/labels")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -84,7 +85,7 @@ class LabelControllerTest {
 
     @Test
     void shouldUpdateLabel() throws Exception {
-        when(labelService.update(any(Long.class), any(UpdateLabelRequest.class))).thenReturn(response);
+        when(labelService.update(any(Long.class), any(UpdateLabelRequest.class), org.mockito.ArgumentMatchers.any(itmo.infrastructure.security.CurrentUser.class))).thenReturn(response);
 
         client.put().uri("http://localhost/api/v1/labels/1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -99,7 +100,7 @@ class LabelControllerTest {
                 .expectStatus().isNoContent()
                 .expectBody().isEmpty();
 
-        verify(labelService).delete(1L);
+        verify(labelService).delete(1L, itmo.support.TestActors.admin());
     }
 
     @Test
@@ -125,7 +126,7 @@ class LabelControllerTest {
 
     @Test
     void shouldReturnConflictError() throws Exception {
-        when(labelService.create(any(CreateLabelRequest.class)))
+        when(labelService.create(any(CreateLabelRequest.class), org.mockito.ArgumentMatchers.any(itmo.infrastructure.security.CurrentUser.class)))
                 .thenThrow(new ConflictException("Label already exists"));
 
         client.post().uri("http://localhost/api/v1/labels")

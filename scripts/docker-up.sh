@@ -16,5 +16,17 @@ export EUREKA_SERVER_PORT="${EUREKA_SERVER_PORT:-58761}"
 cd "${PROJECT_DIR}"
 
 bash "${SCRIPT_DIR}/generate-jwt-keys.sh"
-docker compose up --build -d
+docker compose up --build -d --wait --wait-timeout "${STARTUP_TIMEOUT_SECONDS:-180}"
+swagger_deadline=$((SECONDS + ${STARTUP_TIMEOUT_SECONDS:-180}))
+for service in user-service tracker-service; do
+    until curl --fail --silent --max-time 5 --output /dev/null \
+            "http://localhost:${GATEWAY_PORT}/v3/api-docs/${service}"; do
+        if (( SECONDS >= swagger_deadline )); then
+            echo "OpenAPI route did not become ready: ${service}" >&2
+            exit 1
+        fi
+        sleep 1
+    done
+    echo "OpenAPI is ready: ${service}"
+done
 docker compose ps

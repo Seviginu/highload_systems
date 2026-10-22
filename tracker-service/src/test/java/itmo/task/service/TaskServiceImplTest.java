@@ -69,7 +69,7 @@ class TaskServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        taskService = new TaskServiceImpl(
+        taskService = new TaskServiceImpl(itmo.support.TestActors.access(),
                 taskRepository,
                 new TaskMapper(),
                 projectService,
@@ -92,7 +92,7 @@ class TaskServiceImplTest {
         when(taskRepository.existsByTaskKey("PLATFORM-1")).thenReturn(false);
         when(taskRepository.saveAndFlush(any(Task.class))).thenAnswer(invocation -> persisted(invocation.getArgument(0)));
 
-        var response = taskService.create(createRequest(), "Bearer test-token");
+        var response = taskService.create(createRequest(), itmo.support.TestActors.admin());
 
         assertThat(response.taskKey()).isEqualTo("PLATFORM-1");
         assertThat(response.projectId()).isEqualTo(1L);
@@ -108,11 +108,10 @@ class TaskServiceImplTest {
         when(taskRepository.existsByTaskKey("PLATFORM-1")).thenReturn(false);
         when(taskRepository.saveAndFlush(any(Task.class))).thenAnswer(invocation -> persisted(invocation.getArgument(0)));
         CreateTaskRequest request = new CreateTaskRequest(
-                "PLATFORM-1", "Task", null, TaskStatus.TODO, TaskPriority.MEDIUM,
-                2L, null, 1L, null
+                "PLATFORM-1", "Task", null, TaskStatus.TODO, TaskPriority.MEDIUM, null, 1L, null
         );
 
-        assertThat(taskService.create(request, "Bearer test-token").labelIds()).isEmpty();
+        assertThat(taskService.create(request, itmo.support.TestActors.admin()).labelIds()).isEmpty();
     }
 
     @Test
@@ -120,7 +119,7 @@ class TaskServiceImplTest {
         when(taskRepository.existsByTaskKey("PLATFORM-1")).thenReturn(true);
         CreateTaskRequest request = createRequest();
 
-        assertThatThrownBy(() -> taskService.create(request, "Bearer test-token"))
+        assertThatThrownBy(() -> taskService.create(request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("PLATFORM-1");
         verify(taskRepository, never()).saveAndFlush(any(Task.class));
@@ -134,7 +133,7 @@ class TaskServiceImplTest {
                 .thenThrow(new DataIntegrityViolationException("uq_tasks_task_key"));
         CreateTaskRequest request = createRequest();
 
-        assertThatThrownBy(() -> taskService.create(request, "Bearer test-token"))
+        assertThatThrownBy(() -> taskService.create(request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class);
     }
 
@@ -144,7 +143,7 @@ class TaskServiceImplTest {
         when(projectService.requireEntity(1L)).thenThrow(new ResourceNotFoundException("Project", 1L));
         CreateTaskRequest request = createRequest();
 
-        assertThatThrownBy(() -> taskService.create(request, "Bearer test-token"))
+        assertThatThrownBy(() -> taskService.create(request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(taskRepository, never()).saveAndFlush(any(Task.class));
     }
@@ -194,7 +193,7 @@ class TaskServiceImplTest {
         when(labelService.requireEntities(Set.of(3L))).thenReturn(Set.of(label));
         when(taskRepository.saveAndFlush(task)).thenReturn(task);
 
-        var response = taskService.move(10L, new MoveTaskRequest(4L, 5L, Set.of(3L), 0L), "Bearer test-token");
+        var response = taskService.move(10L, new MoveTaskRequest(4L, 5L, Set.of(3L), 0L), itmo.support.TestActors.admin());
 
         assertThat(response.projectId()).isEqualTo(4L);
         assertThat(response.assigneeId()).isEqualTo(5L);
@@ -212,7 +211,7 @@ class TaskServiceImplTest {
         when(projectService.requireEntity(4L)).thenReturn(targetProject);
         MoveTaskRequest request = new MoveTaskRequest(4L, 5L, Set.of(3L), 0L);
 
-        assertThatThrownBy(() -> taskService.move(10L, request, "Bearer test-token"))
+        assertThatThrownBy(() -> taskService.move(10L, request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("not an active member");
         assertThat(task.getProject().getId()).isEqualTo(1L);
@@ -236,7 +235,7 @@ class TaskServiceImplTest {
         when(taskRepository.existsByTaskKeyAndIdNot("PLATFORM-2", 10L)).thenReturn(false);
         when(taskRepository.saveAndFlush(task)).thenReturn(task);
 
-        var response = taskService.update(10L, updateRequest(0L), "Bearer test-token");
+        var response = taskService.update(10L, updateRequest(0L), itmo.support.TestActors.admin());
 
         assertThat(response.taskKey()).isEqualTo("PLATFORM-2");
         assertThat(response.status()).isEqualTo(TaskStatus.IN_PROGRESS);
@@ -248,7 +247,7 @@ class TaskServiceImplTest {
         when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
         UpdateTaskRequest request = updateRequest(7L);
 
-        assertThatThrownBy(() -> taskService.update(10L, request, "Bearer test-token"))
+        assertThatThrownBy(() -> taskService.update(10L, request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("modified by another request");
         verify(projectService, never()).requireEntity(any());
@@ -261,7 +260,7 @@ class TaskServiceImplTest {
         when(taskRepository.existsByTaskKeyAndIdNot("PLATFORM-2", 10L)).thenReturn(true);
         UpdateTaskRequest request = updateRequest(0L);
 
-        assertThatThrownBy(() -> taskService.update(10L, request, "Bearer test-token"))
+        assertThatThrownBy(() -> taskService.update(10L, request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("PLATFORM-2");
     }
@@ -271,11 +270,10 @@ class TaskServiceImplTest {
         Task task = task();
         when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
         UpdateTaskRequest request = new UpdateTaskRequest(
-                "PLATFORM-2", "Updated", null, TaskStatus.IN_PROGRESS, TaskPriority.CRITICAL,
-                2L, null, 4L, Set.of(3L), 0L
+                "PLATFORM-2", "Updated", null, TaskStatus.IN_PROGRESS, TaskPriority.CRITICAL, null, 4L, Set.of(3L), 0L
         );
 
-        assertThatThrownBy(() -> taskService.update(10L, request, "Bearer test-token"))
+        assertThatThrownBy(() -> taskService.update(10L, request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("move operation");
         verify(projectService, never()).requireEntity(any());
@@ -292,7 +290,7 @@ class TaskServiceImplTest {
                 .thenThrow(new OptimisticLockingFailureException("stale"));
         UpdateTaskRequest request = updateRequest(0L);
 
-        assertThatThrownBy(() -> taskService.update(10L, request, "Bearer test-token"))
+        assertThatThrownBy(() -> taskService.update(10L, request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("modified by another request");
     }
@@ -302,7 +300,7 @@ class TaskServiceImplTest {
         Task task = task();
         when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
 
-        taskService.delete(10L);
+        taskService.delete(10L, itmo.support.TestActors.admin());
 
         verify(taskRepository).delete(task);
         verify(taskRepository).flush();
@@ -310,15 +308,13 @@ class TaskServiceImplTest {
 
     private CreateTaskRequest createRequest() {
         return new CreateTaskRequest(
-                " platform-1 ", "Task", "Description", TaskStatus.TODO, TaskPriority.HIGH,
-                2L, null, 1L, Set.of(3L)
+                " platform-1 ", "Task", "Description", TaskStatus.TODO, TaskPriority.HIGH, null, 1L, Set.of(3L)
         );
     }
 
     private UpdateTaskRequest updateRequest(Long version) {
         return new UpdateTaskRequest(
-                "platform-2", "Updated", null, TaskStatus.IN_PROGRESS, TaskPriority.CRITICAL,
-                2L, null, 1L, Set.of(3L), version
+                "platform-2", "Updated", null, TaskStatus.IN_PROGRESS, TaskPriority.CRITICAL, null, 1L, Set.of(3L), version
         );
     }
 

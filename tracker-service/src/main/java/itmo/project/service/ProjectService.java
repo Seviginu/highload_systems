@@ -1,5 +1,6 @@
 package itmo.project.service;
 
+import itmo.infrastructure.security.CurrentUser;
 import itmo.project.dto.CreateProjectRequest;
 import itmo.project.dto.ProjectResponse;
 import itmo.project.dto.UpdateProjectRequest;
@@ -9,7 +10,7 @@ import org.springframework.data.domain.Pageable;
 
 public interface ProjectService {
 
-    ProjectResponse create(CreateProjectRequest request, String authorization);
+    ProjectResponse create(CreateProjectRequest request, CurrentUser actor);
 
     ProjectResponse findById(Long id);
 
@@ -17,7 +18,7 @@ public interface ProjectService {
 
     Page<ProjectResponse> findAll(Pageable pageable);
 
-    ProjectResponse update(Long id, UpdateProjectRequest request);
+    ProjectResponse update(Long id, UpdateProjectRequest request, CurrentUser actor);
 
-    void delete(Long id);
+    void delete(Long id, CurrentUser actor);
 }
