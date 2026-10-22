@@ -1,8 +1,10 @@
 package itmo.user.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import org.springframework.data.annotation.Id;
@@ -23,6 +25,10 @@ public class User {
     private String email;
     @NotNull
     private UserRole role;
+    @JsonIgnore
+    @Pattern(regexp = "^\\$2[aby]\\$[0-9]{2}\\$[./A-Za-z0-9]{53}$")
+    @Column("password_hash")
+    private String passwordHash;
     @Column("created_at")
     private Instant createdAt;
     @Column("updated_at")
@@ -48,6 +54,10 @@ public class User {
 
     public void delete() {
         deleted = true;
+    }
+
+    public void changePasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
     }
 
     public void markSaved(Instant now) {

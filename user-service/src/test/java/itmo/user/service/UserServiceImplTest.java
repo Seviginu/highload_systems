@@ -7,6 +7,8 @@ import itmo.user.dto.UpdateUserRequest;
 import itmo.user.entity.User;
 import itmo.user.entity.UserRole;
 import itmo.user.mapper.UserMapper;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import reactor.core.scheduler.Schedulers;
 import itmo.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,12 +32,13 @@ class UserServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new UserServiceImpl(repository, new UserMapper());
+        service = new UserServiceImpl(repository, new UserMapper(),
+                new PasswordService(new BCryptPasswordEncoder(4), Schedulers.immediate()));
     }
 
     @Test
     void shouldExecuteCreateOnlyOnSubscription() {
-        var result = service.create(new CreateUserRequest(" Alice ", "ALICE@EXAMPLE.COM", UserRole.ADMIN));
+        var result = service.create(new CreateUserRequest(" Alice ", "ALICE@EXAMPLE.COM", UserRole.ADMIN, "Test-password-123"));
         verifyNoInteractions(repository);
         when(repository.existsByEmailIgnoreCase("alice@example.com")).thenReturn(Mono.just(false));
         when(repository.save(any())).thenAnswer(call -> Mono.just(call.getArgument(0, User.class)));
@@ -47,7 +50,7 @@ class UserServiceImplTest {
     void shouldTranslateConcurrentDatabaseEmailConflict() {
         when(repository.existsByEmailIgnoreCase("alice@example.com")).thenReturn(Mono.just(false));
         when(repository.save(any())).thenReturn(Mono.error(new DataIntegrityViolationException("uq_users_email_lower")));
-        StepVerifier.create(service.create(new CreateUserRequest("Alice", "alice@example.com", UserRole.ADMIN)))
+        StepVerifier.create(service.create(new CreateUserRequest("Alice", "alice@example.com", UserRole.ADMIN, "Test-password-123")))
                 .expectError(ConflictException.class).verify();
     }
 
@@ -55,7 +58,7 @@ class UserServiceImplTest {
     void shouldPreserveOtherIntegrityErrors() {
         when(repository.existsByEmailIgnoreCase("alice@example.com")).thenReturn(Mono.just(false));
         when(repository.save(any())).thenReturn(Mono.error(new DataIntegrityViolationException("other constraint")));
-        StepVerifier.create(service.create(new CreateUserRequest("Alice", "alice@example.com", UserRole.ADMIN)))
+        StepVerifier.create(service.create(new CreateUserRequest("Alice", "alice@example.com", UserRole.ADMIN, "Test-password-123")))
                 .expectError(DataIntegrityViolationException.class).verify();
     }
 

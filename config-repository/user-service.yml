@@ -10,3 +10,9 @@ spring:
     change-log: classpath:db/changelog/db.changelog-master.yaml
 server:
   port: ${SERVER_PORT:8082}
+app:
+  bootstrap-admin:
+    enabled: ${BOOTSTRAP_ADMIN_ENABLED:false}
+    name: ${BOOTSTRAP_ADMIN_NAME:Supervisor}
+    email: ${BOOTSTRAP_ADMIN_EMAIL:}
+    password: ${BOOTSTRAP_ADMIN_PASSWORD:}

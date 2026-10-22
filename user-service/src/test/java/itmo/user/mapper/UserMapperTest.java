@@ -17,8 +17,7 @@ class UserMapperTest {
         CreateUserRequest request = new CreateUserRequest(
                 "  Alice  ",
                 "  Alice@Example.COM ",
-                UserRole.DEVELOPER
-        );
+                UserRole.DEVELOPER, "Test-password-123");
 
         User user = mapper.toEntity(request);
 

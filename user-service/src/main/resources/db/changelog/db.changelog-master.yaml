@@ -1,3 +1,5 @@
 databaseChangeLog:
   - include:
       file: db/changelog/001-create-users.sql
+  - include:
+      file: db/changelog/002-add-password-hash.sql
