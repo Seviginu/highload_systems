@@ -12,8 +12,6 @@ import itmo.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,11 +46,14 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
-    public Mono<Page<UserResponse>> findAll(Pageable pageable) {
+    public Flux<UserResponse> findAll(Pageable pageable) {
         return userRepository.findActivePage(pageable.getPageSize(), pageable.getOffset())
-                .map(userMapper::toResponse).collectList()
-                .flatMap(users -> userRepository.countByDeletedFalse()
-                        .map(total -> new PageImpl<>(users, pageable, total)));
+                .map(userMapper::toResponse);
+    }
+
+    @Override
+    public Mono<Long> count() {
+        return userRepository.countByDeletedFalse();
     }
 
     @Override

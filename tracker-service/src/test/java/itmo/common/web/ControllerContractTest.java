@@ -6,7 +6,7 @@ import itmo.project.controller.ProjectMemberController;
 import itmo.task.controller.TaskController;
 import jakarta.validation.constraints.Max;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.ResponseEntity;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.lang.reflect.Modifier;
@@ -27,19 +27,25 @@ class ControllerContractTest {
     );
 
     @Test
-    void shouldReturnMonoOfResponseEntityFromEveryEndpoint() {
+    void shouldReturnReactiveDtoOrCompletionFromEveryEndpoint() {
         CONTROLLERS.stream()
                 .flatMap(controller -> Stream.of(controller.getDeclaredMethods()))
                 .filter(method -> Modifier.isPublic(method.getModifiers()))
                 .forEach(method -> assertThat(method.getReturnType())
                         .as("%s.%s return type", method.getDeclaringClass().getSimpleName(), method.getName())
-                        .isEqualTo(Mono.class));
+                        .isIn(Mono.class, Flux.class));
         CONTROLLERS.stream().flatMap(controller -> Stream.of(controller.getDeclaredMethods()))
                 .filter(method -> Modifier.isPublic(method.getModifiers()))
                 .forEach(method -> {
                     var publisher = (ParameterizedType) method.getGenericReturnType();
-                    var response = (ParameterizedType) publisher.getActualTypeArguments()[0];
-                    assertThat(response.getRawType()).isEqualTo(ResponseEntity.class);
+                    Type element = publisher.getActualTypeArguments()[0];
+                    assertThat(element).isInstanceOf(Class.class);
+                    Class<?> elementClass = (Class<?>) element;
+                    assertThat(elementClass == Void.class || elementClass.getPackageName().contains(".dto"))
+                            .as("Publisher contains a DTO or Void, not a response wrapper").isTrue();
+                    if (method.getName().equals("findAll") || method.getName().equals("findFeed")) {
+                        assertThat(method.getReturnType()).isEqualTo(Flux.class);
+                    }
                 });
     }
 
@@ -70,15 +76,7 @@ class ControllerContractTest {
         if (!(type instanceof ParameterizedType parameterizedType)) {
             return false;
         }
-        if (parameterizedType.getRawType() == Mono.class) {
-            return isListResponse(parameterizedType.getActualTypeArguments()[0]);
-        }
-        if (parameterizedType.getRawType() != ResponseEntity.class) {
-            return false;
-        }
-        return Stream.of(parameterizedType.getActualTypeArguments())
-                .anyMatch(argument -> argument instanceof ParameterizedType nested
-                        && nested.getRawType() == List.class);
+        return parameterizedType.getRawType() == Flux.class;
     }
 
     private boolean containsEntity(Type type) {

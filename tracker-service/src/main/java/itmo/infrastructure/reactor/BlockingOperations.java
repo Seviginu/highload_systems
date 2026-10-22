@@ -19,4 +19,8 @@ public class BlockingOperations {
     public <T> Mono<T> call(Callable<T> operation) {
         return Mono.fromCallable(operation).subscribeOn(scheduler);
     }
+
+    public Mono<Void> run(Runnable operation) {
+        return Mono.<Void>fromRunnable(operation).subscribeOn(scheduler);
+    }
 }

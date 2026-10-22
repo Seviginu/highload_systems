@@ -111,6 +111,32 @@ class TaskControllerTest {
     }
 
     @Test
+    void shouldReturnEmptyPageAsJsonArrayWithTotalCount() {
+        when(taskService.findAll(any(), any())).thenReturn(new PageImpl<>(List.of()));
+        client.get().uri("/api/v1/tasks").exchange().expectStatus().isOk()
+                .expectHeader().valueEquals("X-Total-Count", "0")
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                .expectBody().json("[]");
+    }
+
+    @Test
+    void shouldReturnEmptyFeedWithoutCursorOrTotalCount() {
+        when(taskService.findFeed(null, 20)).thenReturn(new TaskFeedResponse(List.of(), null));
+        client.get().uri("/api/v1/tasks/feed").exchange().expectStatus().isOk()
+                .expectHeader().doesNotExist("X-Next-Cursor")
+                .expectHeader().doesNotExist("X-Total-Count")
+                .expectBody().json("[]");
+    }
+
+    @Test
+    void shouldReturnListFailureBeforeWritingHeadersOrBody() {
+        when(taskService.findAll(any(), any())).thenThrow(new ResourceNotFoundException("Project", 42L));
+        client.get().uri("/api/v1/tasks?projectId=42").exchange().expectStatus().isNotFound()
+                .expectHeader().doesNotExist("X-Total-Count")
+                .expectBody().jsonPath("$.status").isEqualTo(404);
+    }
+
+    @Test
     void shouldUpdateTask() throws Exception {
         when(taskService.update(any(Long.class), any(UpdateTaskRequest.class))).thenReturn(response);
 

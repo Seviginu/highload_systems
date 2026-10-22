@@ -16,12 +16,12 @@ import itmo.project.service.ProjectMemberService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import java.net.URI;
-import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,10 +30,14 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.util.UriComponentsBuilder;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.net.URI;
 
 @Validated
 @RestController
@@ -82,22 +86,25 @@ public class ProjectMemberController {
             description = "User is already an active member",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<ProjectMemberResponse>> add(
+    @ResponseStatus(HttpStatus.CREATED)
+    public Mono<ProjectMemberResponse> add(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long projectId,
-            @Valid @RequestBody AddProjectMemberRequest request
-    , ServerWebExchange exchange) {
+            @Valid @RequestBody AddProjectMemberRequest request,
+            ServerWebExchange exchange
+    ) {
         return blocking.call(() -> {
             ProjectMemberResponse response = memberService.add(projectId, request);
             URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
                     .path("/{id}")
                     .buildAndExpand(response.id())
                     .toUri();
-            return ResponseEntity.created(location).body(response);
+            exchange.getResponse().getHeaders().setLocation(location);
+            return response;
         });
     }
 
-    @GetMapping
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get a page of project members")
     @ApiResponse(
             responseCode = "200",
@@ -114,23 +121,23 @@ public class ProjectMemberController {
             description = "Project not found",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<List<ProjectMemberResponse>>> findAll(
+    public Flux<ProjectMemberResponse> findAll(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long projectId,
             @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @Parameter(description = "Page size from 1 to 50", example = "20")
-            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size,
+            ServerHttpResponse response
     ) {
         return blocking.call(() -> {
             Page<ProjectMemberResponse> result = memberService.findAll(
                     projectId,
                     PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"))
             );
-            return ResponseEntity.ok()
-                    .header("X-Total-Count", String.valueOf(result.getTotalElements()))
-                    .body(result.getContent());
-        });
+            response.getHeaders().set("X-Total-Count", String.valueOf(result.getTotalElements()));
+            return result.getContent();
+        }).flatMapMany(Flux::fromIterable);
     }
 
     @DeleteMapping("/{memberId}")
@@ -141,15 +148,13 @@ public class ProjectMemberController {
             description = "Project or member not found",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<Void>> deactivate(
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public Mono<Void> deactivate(
             @Parameter(description = "Project identifier", example = "1")
             @PathVariable Long projectId,
             @Parameter(description = "Project membership identifier", example = "1")
             @PathVariable Long memberId
     ) {
-        return blocking.call(() -> {
-            memberService.deactivate(projectId, memberId);
-            return ResponseEntity.noContent().build();
-        });
+        return blocking.run(() -> memberService.deactivate(projectId, memberId));
     }
 }

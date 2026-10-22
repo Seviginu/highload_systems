@@ -47,6 +47,22 @@ class BlockingOperationsTest {
     }
 
     @Test
+    void shouldRunCompletionOnlyWorkLazilyOnWorker() {
+        AtomicInteger calls = new AtomicInteger();
+        Mono<Void> result = operations.run(() -> {
+            assertThat(Schedulers.isInNonBlockingThread()).isFalse();
+            assertThat(Thread.currentThread().getName()).startsWith("tracker-blocking-test-");
+            calls.incrementAndGet();
+        });
+        assertThat(calls).hasValue(0);
+        StepVerifier.create(result.subscribeOn(eventLoop)).verifyComplete();
+        assertThat(calls).hasValue(1);
+        ConflictException conflict = new ConflictException("Cannot delete");
+        StepVerifier.create(operations.run(() -> { throw conflict; }))
+                .expectErrorMatches(error -> error == conflict).verify(Duration.ofSeconds(3));
+    }
+
+    @Test
     void shouldPropagateBusinessException() {
         ConflictException conflict = new ConflictException("Version conflict");
         StepVerifier.create(operations.call(() -> { throw conflict; }))

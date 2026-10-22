@@ -18,7 +18,9 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,13 +30,14 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.util.UriComponentsBuilder;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
-import java.util.List;
 
 @Validated
 @RestController
@@ -70,11 +73,13 @@ public class UserController {
             description = "Email is already used",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<UserResponse>> create(@Valid @RequestBody CreateUserRequest request, ServerWebExchange exchange) {
+    @ResponseStatus(HttpStatus.CREATED)
+    public Mono<UserResponse> create(@Valid @RequestBody CreateUserRequest request, ServerWebExchange exchange) {
         return userService.create(request).map(response -> {
             URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
                     .path("/{id}").buildAndExpand(response.id()).toUri();
-            return ResponseEntity.created(location).body(response);
+            exchange.getResponse().getHeaders().setLocation(location);
+            return response;
         });
     }
 
@@ -90,14 +95,14 @@ public class UserController {
             description = "User not found",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<UserResponse>> findById(
+    public Mono<UserResponse> findById(
             @Parameter(description = "User identifier", example = "1")
             @PathVariable Long id
     ) {
-        return userService.findById(id).map(ResponseEntity::ok);
+        return userService.findById(id);
     }
 
-    @GetMapping
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get a page of users")
     @ApiResponse(
             responseCode = "200",
@@ -114,16 +119,17 @@ public class UserController {
             description = "Invalid page or size",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<List<UserResponse>>> findAll(
+    public Flux<UserResponse> findAll(
             @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @Parameter(description = "Page size from 1 to 50", example = "20")
-            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size,
+            ServerHttpResponse response
     ) {
-        return userService.findAll(PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id")))
-                .map(result -> ResponseEntity.ok()
-                        .header("X-Total-Count", String.valueOf(result.getTotalElements()))
-                        .body(result.getContent()));
+        return userService.count().flatMapMany(total -> {
+            response.getHeaders().set("X-Total-Count", String.valueOf(total));
+            return userService.findAll(PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id")));
+        });
     }
 
     @PutMapping("/{id}")
@@ -148,12 +154,12 @@ public class UserController {
             description = "Email is already used",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<UserResponse>> update(
+    public Mono<UserResponse> update(
             @Parameter(description = "User identifier", example = "1")
             @PathVariable Long id,
             @Valid @RequestBody UpdateUserRequest request
     ) {
-        return userService.update(id, request).map(ResponseEntity::ok);
+        return userService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
@@ -169,10 +175,11 @@ public class UserController {
             description = "Concurrent modification",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<Void>> delete(
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public Mono<Void> delete(
             @Parameter(description = "User identifier", example = "1")
             @PathVariable Long id
     ) {
-        return userService.delete(id).thenReturn(ResponseEntity.noContent().build());
+        return userService.delete(id);
     }
 }

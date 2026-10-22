@@ -17,9 +17,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 
-import java.util.List;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -83,17 +83,22 @@ class UserServiceContractTest {
     }
 
     @Test
-    void shouldReturnPageOfUsers() {
+    void shouldStreamUsersWithDemandAndCancellation() {
         User user = new User("Alice", "alice@example.com", UserRole.DEVELOPER);
         PageRequest pageable = PageRequest.of(0, 20);
-        when(userRepository.findActivePage(20, 0)).thenReturn(Flux.just(user));
+        User another = new User("Bob", "bob@example.com", UserRole.DEVELOPER);
+        when(userRepository.findActivePage(20, 0)).thenReturn(Flux.just(user, another));
+        StepVerifier.create(userService.findAll(pageable), 0)
+                .thenRequest(1)
+                .assertNext(response -> assertThat(response.email()).isEqualTo("alice@example.com"))
+                .thenCancel().verify();
+        verify(userRepository, never()).countByDeletedFalse();
+    }
+
+    @Test
+    void shouldCountActiveUsersSeparately() {
         when(userRepository.countByDeletedFalse()).thenReturn(Mono.just(1L));
-
-        var result = userService.findAll(pageable).block();
-
-        assertThat(result.getTotalElements()).isEqualTo(1);
-        assertThat(result.getContent()).extracting(UserResponse::email)
-                .containsExactly("alice@example.com");
+        StepVerifier.create(userService.count()).expectNext(1L).verifyComplete();
     }
 
     @Test

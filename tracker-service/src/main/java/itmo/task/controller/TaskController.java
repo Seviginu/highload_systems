@@ -23,12 +23,12 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
-import java.net.URI;
-import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,10 +38,14 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.util.UriComponentsBuilder;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.net.URI;
 
 @Validated
 @RestController
@@ -85,14 +89,16 @@ public class TaskController {
             description = "Task key is already used",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<TaskResponse>> create(@Valid @RequestBody CreateTaskRequest request, ServerWebExchange exchange) {
+    @ResponseStatus(HttpStatus.CREATED)
+    public Mono<TaskResponse> create(@Valid @RequestBody CreateTaskRequest request, ServerWebExchange exchange) {
         return blocking.call(() -> {
             TaskResponse response = taskService.create(request);
             URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
                     .path("/{id}")
                     .buildAndExpand(response.id())
                     .toUri();
-            return ResponseEntity.created(location).body(response);
+            exchange.getResponse().getHeaders().setLocation(location);
+            return response;
         });
     }
 
@@ -108,14 +114,14 @@ public class TaskController {
             description = "Task not found",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<TaskResponse>> findById(
+    public Mono<TaskResponse> findById(
             @Parameter(description = "Task identifier", example = "1")
             @PathVariable Long id
     ) {
-        return blocking.call(() -> ResponseEntity.ok(taskService.findById(id)));
+        return blocking.call(() -> taskService.findById(id));
     }
 
-    @GetMapping
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get a page of tasks")
     @ApiResponse(
             responseCode = "200",
@@ -132,7 +138,7 @@ public class TaskController {
             description = "Invalid filter, page or size",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<List<TaskResponse>>> findAll(
+    public Flux<TaskResponse> findAll(
             @Parameter(description = "Filter by project identifier", example = "1")
             @RequestParam(required = false) @Positive Long projectId,
             @Parameter(description = "Filter by author identifier", example = "2")
@@ -148,20 +154,20 @@ public class TaskController {
             @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @Parameter(description = "Page size from 1 to 50", example = "20")
-            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size,
+            ServerHttpResponse response
     ) {
         return blocking.call(() -> {
             Page<TaskResponse> result = taskService.findAll(
                     new TaskFilter(projectId, authorId, assigneeId, labelId, status, priority),
                     PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"))
             );
-            return ResponseEntity.ok()
-                    .header("X-Total-Count", String.valueOf(result.getTotalElements()))
-                    .body(result.getContent());
-        });
+            response.getHeaders().set("X-Total-Count", String.valueOf(result.getTotalElements()));
+            return result.getContent();
+        }).flatMapMany(Flux::fromIterable);
     }
 
-    @GetMapping("/feed")
+    @GetMapping(value = "/feed", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get a cursor-based task feed")
     @ApiResponse(
             responseCode = "200",
@@ -178,20 +184,20 @@ public class TaskController {
             description = "Invalid cursor or limit",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<List<TaskResponse>>> findFeed(
+    public Flux<TaskResponse> findFeed(
             @Parameter(description = "Return tasks with an id greater than this cursor", example = "100")
             @RequestParam(required = false) @Min(0) Long afterId,
             @Parameter(description = "Feed size from 1 to 50", example = "20")
-            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit,
+            ServerHttpResponse response
     ) {
         return blocking.call(() -> {
             TaskFeedResponse result = taskService.findFeed(afterId, limit);
-            ResponseEntity.BodyBuilder response = ResponseEntity.ok();
             if (result.nextCursor() != null) {
-                response.header("X-Next-Cursor", String.valueOf(result.nextCursor()));
+                response.getHeaders().set("X-Next-Cursor", String.valueOf(result.nextCursor()));
             }
-            return response.body(result.tasks());
-        });
+            return result.tasks();
+        }).flatMapMany(Flux::fromIterable);
     }
 
     @PutMapping("/{id}")
@@ -216,12 +222,12 @@ public class TaskController {
             description = "Task key, version or project change conflict",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<TaskResponse>> update(
+    public Mono<TaskResponse> update(
             @Parameter(description = "Task identifier", example = "1")
             @PathVariable Long id,
             @Valid @RequestBody UpdateTaskRequest request
     ) {
-        return blocking.call(() -> ResponseEntity.ok(taskService.update(id, request)));
+        return blocking.call(() -> taskService.update(id, request));
     }
 
     @PostMapping("/{id}/move")
@@ -246,12 +252,12 @@ public class TaskController {
             description = "Assignee membership or version conflict",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<TaskResponse>> move(
+    public Mono<TaskResponse> move(
             @Parameter(description = "Task identifier", example = "1")
             @PathVariable Long id,
             @Valid @RequestBody MoveTaskRequest request
     ) {
-        return blocking.call(() -> ResponseEntity.ok(taskService.move(id, request)));
+        return blocking.call(() -> taskService.move(id, request));
     }
 
     @DeleteMapping("/{id}")
@@ -262,13 +268,11 @@ public class TaskController {
             description = "Task not found",
             content = @Content(schema = @Schema(implementation = ApiError.class))
     )
-    public Mono<ResponseEntity<Void>> delete(
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public Mono<Void> delete(
             @Parameter(description = "Task identifier", example = "1")
             @PathVariable Long id
     ) {
-        return blocking.call(() -> {
-            taskService.delete(id);
-            return ResponseEntity.noContent().build();
-        });
+        return blocking.run(() -> taskService.delete(id));
     }
 }

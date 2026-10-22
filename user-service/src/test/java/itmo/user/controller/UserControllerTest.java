@@ -13,18 +13,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
 
 import java.time.Instant;
-import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -60,9 +60,36 @@ class UserControllerTest {
     @Test
     void shouldReturnPageAndTotalCountHeader() {
         var page = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "id"));
-        when(service.findAll(page)).thenReturn(Mono.just(new PageImpl<>(List.of(user), page, 1)));
+        when(service.count()).thenReturn(Mono.just(1L));
+        when(service.findAll(page)).thenReturn(Flux.just(user));
         client.get().uri("/api/v1/users").exchange().expectStatus().isOk()
                 .expectHeader().valueEquals("X-Total-Count", "1").expectBody().jsonPath("$[0].id").isEqualTo(1);
+    }
+
+    @Test
+    void shouldReturnEmptyJsonArrayWithTotalCount() {
+        when(service.count()).thenReturn(Mono.just(0L));
+        when(service.findAll(any())).thenReturn(Flux.empty());
+        client.get().uri("/api/v1/users").exchange().expectStatus().isOk()
+                .expectHeader().valueEquals("X-Total-Count", "0")
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                .expectBody().json("[]");
+    }
+
+    @Test
+    void shouldReturnCountFailureBeforeReadingUsers() {
+        when(service.count()).thenReturn(Mono.error(new ConflictException("Count failed")));
+        client.get().uri("/api/v1/users").exchange().expectStatus().isEqualTo(409)
+                .expectHeader().doesNotExist("X-Total-Count")
+                .expectBody().jsonPath("$.message").isEqualTo("Count failed");
+        verify(service, never()).findAll(any());
+    }
+
+    @Test
+    void shouldOverrideNoContentStatusOnDeleteFailure() {
+        when(service.delete(42L)).thenReturn(Mono.error(new ResourceNotFoundException("User", 42L)));
+        client.delete().uri("/api/v1/users/42").exchange().expectStatus().isNotFound()
+                .expectBody().jsonPath("$.status").isEqualTo(404);
     }
 
     @Test
