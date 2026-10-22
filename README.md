@@ -2,6 +2,8 @@
 
 Java 21, Maven, Spring Boot. После ЛР2 проект состоит из `user-service` (WebFlux/R2DBC), `tracker-service` (WebFlux/JPA), Gateway, Eureka и Config Server. PostgreSQL и Redis запускаются через Docker Compose.
 
+[Соответствие требованиям ЛР1–3, результаты проверки и сценарий сдачи](docs/LAB3_HANDOFF.md).
+
 ## Пароли и bootstrap
 
 В `POST /api/v1/users` добавлено обязательное поле `password`: минимум 8 символов, максимум 72 байта UTF-8. В БД сохраняется BCrypt-хэш с индивидуальной солью. Ответы пользователя и внутреннего API не содержат пароль или хэш. Обычное обновление пользователя пароль не меняет.
