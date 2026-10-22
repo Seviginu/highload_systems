@@ -43,7 +43,7 @@ class ProjectControllerTest {
         ProjectController controller = new ProjectController(projectService, new BlockingOperations(Schedulers.boundedElastic()));
         client = WebTestClient.bindToController(controller)
                 .controllerAdvice(new GlobalExceptionHandler())
-                .build();
+                .configureClient().defaultHeader("Authorization", "Bearer test-token").build();
         response = new ProjectResponse(
                 1L,
                 "Platform",
@@ -57,7 +57,7 @@ class ProjectControllerTest {
 
     @Test
     void shouldCreateProject() throws Exception {
-        when(projectService.create(any(CreateProjectRequest.class))).thenReturn(response);
+        when(projectService.create(any(CreateProjectRequest.class), org.mockito.ArgumentMatchers.anyString())).thenReturn(response);
 
         client.post().uri("http://localhost/api/v1/projects")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -141,7 +141,7 @@ class ProjectControllerTest {
 
     @Test
     void shouldReturnConflictError() throws Exception {
-        when(projectService.create(any(CreateProjectRequest.class)))
+        when(projectService.create(any(CreateProjectRequest.class), org.mockito.ArgumentMatchers.anyString()))
                 .thenThrow(new ConflictException("Project already exists"));
 
         client.post().uri("http://localhost/api/v1/projects")

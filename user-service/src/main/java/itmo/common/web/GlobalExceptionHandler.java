@@ -2,6 +2,8 @@ package itmo.common.web;
 
 import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +18,16 @@ import java.util.List;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiError> handleAuthentication(AuthenticationException error, ServerWebExchange exchange) {
+        exchange.getResponse().getHeaders().set("WWW-Authenticate", "Bearer");
+        return build(HttpStatus.UNAUTHORIZED, error.getMessage(), exchange, List.of());
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiError> handleAccessDenied(AccessDeniedException error, ServerWebExchange exchange) {
+        return build(HttpStatus.FORBIDDEN, "Access denied", exchange, List.of());
+    }
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(ResourceNotFoundException error, ServerWebExchange exchange) {
         return build(HttpStatus.NOT_FOUND, error.getMessage(), exchange, List.of());

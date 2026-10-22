@@ -92,7 +92,7 @@ class TaskServiceImplTest {
         when(taskRepository.existsByTaskKey("PLATFORM-1")).thenReturn(false);
         when(taskRepository.saveAndFlush(any(Task.class))).thenAnswer(invocation -> persisted(invocation.getArgument(0)));
 
-        var response = taskService.create(createRequest());
+        var response = taskService.create(createRequest(), "Bearer test-token");
 
         assertThat(response.taskKey()).isEqualTo("PLATFORM-1");
         assertThat(response.projectId()).isEqualTo(1L);
@@ -112,7 +112,7 @@ class TaskServiceImplTest {
                 2L, null, 1L, null
         );
 
-        assertThat(taskService.create(request).labelIds()).isEmpty();
+        assertThat(taskService.create(request, "Bearer test-token").labelIds()).isEmpty();
     }
 
     @Test
@@ -120,7 +120,7 @@ class TaskServiceImplTest {
         when(taskRepository.existsByTaskKey("PLATFORM-1")).thenReturn(true);
         CreateTaskRequest request = createRequest();
 
-        assertThatThrownBy(() -> taskService.create(request))
+        assertThatThrownBy(() -> taskService.create(request, "Bearer test-token"))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("PLATFORM-1");
         verify(taskRepository, never()).saveAndFlush(any(Task.class));
@@ -134,7 +134,7 @@ class TaskServiceImplTest {
                 .thenThrow(new DataIntegrityViolationException("uq_tasks_task_key"));
         CreateTaskRequest request = createRequest();
 
-        assertThatThrownBy(() -> taskService.create(request))
+        assertThatThrownBy(() -> taskService.create(request, "Bearer test-token"))
                 .isInstanceOf(ConflictException.class);
     }
 
@@ -144,7 +144,7 @@ class TaskServiceImplTest {
         when(projectService.requireEntity(1L)).thenThrow(new ResourceNotFoundException("Project", 1L));
         CreateTaskRequest request = createRequest();
 
-        assertThatThrownBy(() -> taskService.create(request))
+        assertThatThrownBy(() -> taskService.create(request, "Bearer test-token"))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(taskRepository, never()).saveAndFlush(any(Task.class));
     }
@@ -194,7 +194,7 @@ class TaskServiceImplTest {
         when(labelService.requireEntities(Set.of(3L))).thenReturn(Set.of(label));
         when(taskRepository.saveAndFlush(task)).thenReturn(task);
 
-        var response = taskService.move(10L, new MoveTaskRequest(4L, 5L, Set.of(3L), 0L));
+        var response = taskService.move(10L, new MoveTaskRequest(4L, 5L, Set.of(3L), 0L), "Bearer test-token");
 
         assertThat(response.projectId()).isEqualTo(4L);
         assertThat(response.assigneeId()).isEqualTo(5L);
@@ -212,7 +212,7 @@ class TaskServiceImplTest {
         when(projectService.requireEntity(4L)).thenReturn(targetProject);
         MoveTaskRequest request = new MoveTaskRequest(4L, 5L, Set.of(3L), 0L);
 
-        assertThatThrownBy(() -> taskService.move(10L, request))
+        assertThatThrownBy(() -> taskService.move(10L, request, "Bearer test-token"))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("not an active member");
         assertThat(task.getProject().getId()).isEqualTo(1L);
@@ -236,7 +236,7 @@ class TaskServiceImplTest {
         when(taskRepository.existsByTaskKeyAndIdNot("PLATFORM-2", 10L)).thenReturn(false);
         when(taskRepository.saveAndFlush(task)).thenReturn(task);
 
-        var response = taskService.update(10L, updateRequest(0L));
+        var response = taskService.update(10L, updateRequest(0L), "Bearer test-token");
 
         assertThat(response.taskKey()).isEqualTo("PLATFORM-2");
         assertThat(response.status()).isEqualTo(TaskStatus.IN_PROGRESS);
@@ -248,7 +248,7 @@ class TaskServiceImplTest {
         when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
         UpdateTaskRequest request = updateRequest(7L);
 
-        assertThatThrownBy(() -> taskService.update(10L, request))
+        assertThatThrownBy(() -> taskService.update(10L, request, "Bearer test-token"))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("modified by another request");
         verify(projectService, never()).requireEntity(any());
@@ -261,7 +261,7 @@ class TaskServiceImplTest {
         when(taskRepository.existsByTaskKeyAndIdNot("PLATFORM-2", 10L)).thenReturn(true);
         UpdateTaskRequest request = updateRequest(0L);
 
-        assertThatThrownBy(() -> taskService.update(10L, request))
+        assertThatThrownBy(() -> taskService.update(10L, request, "Bearer test-token"))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("PLATFORM-2");
     }
@@ -275,7 +275,7 @@ class TaskServiceImplTest {
                 2L, null, 4L, Set.of(3L), 0L
         );
 
-        assertThatThrownBy(() -> taskService.update(10L, request))
+        assertThatThrownBy(() -> taskService.update(10L, request, "Bearer test-token"))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("move operation");
         verify(projectService, never()).requireEntity(any());
@@ -292,7 +292,7 @@ class TaskServiceImplTest {
                 .thenThrow(new OptimisticLockingFailureException("stale"));
         UpdateTaskRequest request = updateRequest(0L);
 
-        assertThatThrownBy(() -> taskService.update(10L, request))
+        assertThatThrownBy(() -> taskService.update(10L, request, "Bearer test-token"))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("modified by another request");
     }

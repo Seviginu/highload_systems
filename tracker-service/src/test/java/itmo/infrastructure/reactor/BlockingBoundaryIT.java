@@ -72,6 +72,10 @@ class BlockingBoundaryIT {
 
     @BeforeEach
     void setUp() {
+        client.getRestTemplate().setInterceptors(java.util.List.of((request, body, execution) -> {
+            request.getHeaders().set("Authorization", itmo.security.TestTokens.bearer());
+            return execution.execute(request, body);
+        }));
         probe.capture = false;
         probe.threads.clear();
         USERS.clear();

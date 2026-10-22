@@ -7,7 +7,7 @@ import org.springframework.data.domain.Pageable;
 
 public interface ProjectMemberService {
 
-    ProjectMemberResponse add(Long projectId, AddProjectMemberRequest request);
+    ProjectMemberResponse add(Long projectId, AddProjectMemberRequest request, String authorization);
 
     @SuppressWarnings("UnusedReturnValue")
     ProjectMemberResponse assignValidatedTeamLead(Long projectId, Long userId);

@@ -1,6 +1,7 @@
 package itmo.user.service;
 
 import itmo.user.validation.PasswordValidator;
+import java.nio.charset.StandardCharsets;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -24,5 +25,11 @@ public class PasswordService {
             }
             return encoder.encode(password);
         }).subscribeOn(scheduler);
+    }
+
+    public Mono<Boolean> matches(String password, String hash) {
+        return Mono.fromCallable(() -> password != null && hash != null
+                && password.getBytes(StandardCharsets.UTF_8).length <= 72 && encoder.matches(password, hash))
+                .subscribeOn(scheduler);
     }
 }

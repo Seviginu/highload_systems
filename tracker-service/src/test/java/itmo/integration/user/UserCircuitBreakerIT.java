@@ -62,6 +62,10 @@ class UserCircuitBreakerIT {
 
     @BeforeEach
     void setUp() {
+        client.getRestTemplate().setInterceptors(java.util.List.of((request, body, execution) -> {
+            request.getHeaders().set("Authorization", itmo.security.TestTokens.bearer());
+            return execution.execute(request, body);
+        }));
         USERS.clear();
         breaker = registry.circuitBreaker("userDirectory");
         breaker.reset();
@@ -72,7 +76,7 @@ class UserCircuitBreakerIT {
     void shouldOpenAfterFailuresSkipHttpAndRecoverThroughHalfOpen() {
         USERS.unavailable(true);
         for (int i = 0; i < 3; i++) {
-            assertThatThrownBy(() -> directory.requireUsers(leadId))
+            assertThatThrownBy(() -> directory.requireUsers("Bearer test-token", leadId))
                     .isInstanceOf(DependencyUnavailableException.class);
         }
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
@@ -90,10 +94,10 @@ class UserCircuitBreakerIT {
         USERS.unavailable(false);
         // The next admitted request after the configured wait is the first probe.
         await().atMost(4, TimeUnit.SECONDS).ignoreException(DependencyUnavailableException.class).untilAsserted(() -> {
-            directory.requireUsers(leadId);
+            directory.requireUsers("Bearer test-token", leadId);
             assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.HALF_OPEN);
         });
-        directory.requireUsers(leadId);
+        directory.requireUsers("Bearer test-token", leadId);
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
         assertThat(USERS.requestCount()).isEqualTo(5);
     }
@@ -103,11 +107,11 @@ class UserCircuitBreakerIT {
         USERS.unavailable(true);
         breaker.transitionToOpenState();
         await().atMost(4, TimeUnit.SECONDS).until(() -> {
-            try { directory.requireUsers(leadId); } catch (DependencyUnavailableException ignored) { }
+            try { directory.requireUsers("Bearer test-token", leadId); } catch (DependencyUnavailableException ignored) { }
             return USERS.requestCount() == 1;
         });
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.HALF_OPEN);
-        assertThatThrownBy(() -> directory.requireUsers(leadId)).isInstanceOf(DependencyUnavailableException.class);
+        assertThatThrownBy(() -> directory.requireUsers("Bearer test-token", leadId)).isInstanceOf(DependencyUnavailableException.class);
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
     }
 
@@ -115,7 +119,7 @@ class UserCircuitBreakerIT {
     void shouldCountReadTimeoutsAsFailures() {
         USERS.delay(500);
         for (int i = 0; i < 3; i++) {
-            assertThatThrownBy(() -> directory.requireUsers(leadId)).isInstanceOf(DependencyUnavailableException.class);
+            assertThatThrownBy(() -> directory.requireUsers("Bearer test-token", leadId)).isInstanceOf(DependencyUnavailableException.class);
         }
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
         assertThat(USERS.requestCount()).isEqualTo(3);
@@ -125,11 +129,43 @@ class UserCircuitBreakerIT {
     void shouldKeepMissingUsersAndWrongRolesOutsideFailureStatistics() {
         Long developerId = USERS.create(new TestUser("DEVELOPER")).getId();
         for (int i = 0; i < 4; i++) {
-            assertThatThrownBy(() -> directory.requireUsers(-1L)).isInstanceOf(ResourceNotFoundException.class);
-            assertThatThrownBy(() -> directory.requireTeamLead(developerId)).isInstanceOf(ConflictException.class);
+            assertThatThrownBy(() -> directory.requireUsers("Bearer test-token", -1L)).isInstanceOf(ResourceNotFoundException.class);
+            assertThatThrownBy(() -> directory.requireTeamLead("Bearer test-token", developerId)).isInstanceOf(ConflictException.class);
         }
         assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
         assertThat(breaker.getMetrics().getNumberOfFailedCalls()).isZero();
         assertThat(USERS.requestCount()).isEqualTo(8);
+    }
+
+    @Test
+    void shouldForwardAuthorizationAndExcludeDenialsFromCircuitBreakerFailures() {
+        String bearer = itmo.security.TestTokens.bearer();
+        directory.requireUsers(bearer, leadId);
+        assertThat(USERS.lastAuthorization()).isEqualTo(bearer);
+        for (int status : new int[]{401, 403}) {
+            USERS.authorizationFailure(status);
+            for (int i = 0; i < 4; i++) {
+                assertThatThrownBy(() -> directory.requireUsers(bearer, leadId))
+                        .isInstanceOf(status == 401 ? org.springframework.security.authentication.BadCredentialsException.class
+                                : org.springframework.security.access.AccessDeniedException.class);
+            }
+        }
+        assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+        assertThat(breaker.getMetrics().getNumberOfFailedCalls()).isZero();
+    }
+
+    @Test
+    void shouldRelayJwtFromHttpRequestThroughWorkerAndFeign() {
+        String bearer = itmo.security.TestTokens.bearer();
+        client.getRestTemplate().setInterceptors(java.util.List.of((request, body, execution) -> {
+            request.getHeaders().set("Authorization", bearer);
+            return execution.execute(request, body);
+        }));
+        var created = client.postForEntity("/api/v1/projects", Map.of(
+                "name", "Authorized", "code", "AUTHORIZED", "status", "ACTIVE", "teamLeadId", leadId), Map.class);
+        assertThat(created.getStatusCode().value()).isEqualTo(201);
+        assertThat(USERS.lastAuthorization()).isEqualTo(bearer);
+        client.getRestTemplate().setInterceptors(java.util.List.of());
+        assertThat(client.getForEntity("/api/v1/projects", Map.class).getStatusCode().value()).isEqualTo(401);
     }
 }

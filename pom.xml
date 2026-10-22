@@ -29,6 +29,7 @@
     </properties>
 
     <modules>
+        <module>security-common</module>
         <module>config-server</module>
         <module>discovery-server</module>
         <module>user-service</module>

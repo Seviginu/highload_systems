@@ -81,7 +81,7 @@ public class ProjectController {
     @ResponseStatus(HttpStatus.CREATED)
     public Mono<ProjectResponse> create(@Valid @RequestBody CreateProjectRequest request, ServerWebExchange exchange) {
         return blocking.call(() -> {
-            ProjectResponse response = projectService.create(request);
+            ProjectResponse response = projectService.create(request, exchange.getRequest().getHeaders().getFirst("Authorization"));
             URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
                     .path("/{id}")
                     .buildAndExpand(response.id())

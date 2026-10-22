@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import itmo.common.web.ApiError;
 import itmo.user.dto.CreateUserRequest;
+import itmo.user.dto.PasswordRequest;
 import itmo.user.dto.UpdateUserRequest;
 import itmo.user.dto.UserResponse;
 import itmo.user.service.UserService;
@@ -46,6 +47,13 @@ import java.net.URI;
 public class UserController {
 
     private final UserService userService;
+
+    @PutMapping("/{id}/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Set a user password (supervisor only)")
+    public Mono<Void> changePassword(@PathVariable Long id, @Valid @RequestBody PasswordRequest request) {
+        return userService.changePassword(id, request);
+    }
 
     public UserController(UserService userService) {
         this.userService = userService;

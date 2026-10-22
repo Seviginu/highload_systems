@@ -31,8 +31,8 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     private final ProjectMemberMapper memberMapper;
 
     @Override
-    public ProjectMemberResponse add(Long projectId, AddProjectMemberRequest request) {
-        userDirectory.requireUsers(request.userId());
+    public ProjectMemberResponse add(Long projectId, AddProjectMemberRequest request, String authorization) {
+        userDirectory.requireUsers(authorization, request.userId());
         return transactions.execute(status -> addMember(projectId, request.userId()));
     }
 

@@ -11,7 +11,7 @@ import org.springframework.data.domain.Pageable;
 
 public interface TaskService {
 
-    TaskResponse create(CreateTaskRequest request);
+    TaskResponse create(CreateTaskRequest request, String authorization);
 
     TaskResponse findById(Long id);
 
@@ -19,9 +19,9 @@ public interface TaskService {
 
     TaskFeedResponse findFeed(Long afterId, int limit);
 
-    TaskResponse move(Long id, MoveTaskRequest request);
+    TaskResponse move(Long id, MoveTaskRequest request, String authorization);
 
-    TaskResponse update(Long id, UpdateTaskRequest request);
+    TaskResponse update(Long id, UpdateTaskRequest request, String authorization);
 
     void delete(Long id);
 }

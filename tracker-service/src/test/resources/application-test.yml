@@ -10,3 +10,10 @@ spring:
 eureka:
   client:
     enabled: false
+
+---
+app:
+  jwt:
+    public-key: classpath:keys/test-public.pem
+    issuer: http://task-tracker
+    audience: task-tracker-api

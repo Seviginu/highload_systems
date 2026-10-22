@@ -6,6 +6,8 @@ import itmo.user.dto.CreateUserRequest;
 import itmo.user.dto.UpdateUserRequest;
 import itmo.user.dto.UserReference;
 import itmo.user.dto.UserResponse;
+import itmo.user.dto.PasswordRequest;
+import org.springframework.security.access.prepost.PreAuthorize;
 import itmo.user.entity.User;
 import itmo.user.mapper.UserMapper;
 import itmo.user.repository.UserRepository;
@@ -29,6 +31,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
     public Mono<UserResponse> create(CreateUserRequest request) {
         return Mono.defer(() -> {
             String email = userMapper.normalizeEmail(request.email());
@@ -45,24 +48,28 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @PreAuthorize("hasRole('ADMIN')")
     public Mono<UserResponse> findById(Long id) {
         return findEntity(id).map(userMapper::toResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
+    @PreAuthorize("hasRole('ADMIN')")
     public Flux<UserResponse> findAll(Pageable pageable) {
         return userRepository.findActivePage(pageable.getPageSize(), pageable.getOffset())
                 .map(userMapper::toResponse);
     }
 
     @Override
+    @PreAuthorize("hasRole('ADMIN')")
     public Mono<Long> count() {
         return userRepository.countByDeletedFalse();
     }
 
     @Override
     @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
     public Mono<UserResponse> update(Long id, UpdateUserRequest request) {
         return Mono.defer(() -> {
             String email = userMapper.normalizeEmail(request.email());
@@ -82,11 +89,22 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
     public Mono<Void> delete(Long id) {
         return findEntity(id).flatMap(user -> {
             user.delete();
             return userRepository.save(user);
         }).onErrorMap(OptimisticLockingFailureException.class, error -> versionConflict(id)).then();
+    }
+
+    @Override
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    public Mono<Void> changePassword(Long id, PasswordRequest request) {
+        return findEntity(id).flatMap(user -> passwords.encode(request.password()).flatMap(hash -> {
+            user.changePasswordHash(hash);
+            return userRepository.save(user);
+        })).onErrorMap(OptimisticLockingFailureException.class, error -> versionConflict(id)).then();
     }
 
     @Override

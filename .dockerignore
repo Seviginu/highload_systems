@@ -1,6 +1,8 @@
 .git
 .idea
 .env
+.local
+IMPLEMENTATION_PLAN_LAB3.md
 target
 **/target
 logs

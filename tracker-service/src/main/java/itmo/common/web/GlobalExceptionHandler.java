@@ -18,6 +18,18 @@ import org.springframework.web.server.ServerWebInputException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
+    public ResponseEntity<ApiError> handleAuthentication(org.springframework.security.core.AuthenticationException error,
+                                                        ServerWebExchange exchange) {
+        exchange.getResponse().getHeaders().set("WWW-Authenticate", "Bearer");
+        return build(HttpStatus.UNAUTHORIZED, "Authentication failed", exchange, List.of());
+    }
+
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ApiError> handleAccessDenied(org.springframework.security.access.AccessDeniedException error,
+                                                      ServerWebExchange exchange) {
+        return build(HttpStatus.FORBIDDEN, "Access denied", exchange, List.of());
+    }
 
     @ExceptionHandler(DependencyUnavailableException.class)
     public ResponseEntity<ApiError> handleDependencyUnavailable(DependencyUnavailableException error, ServerWebExchange request) {

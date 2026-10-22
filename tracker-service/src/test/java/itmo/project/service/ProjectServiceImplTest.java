@@ -56,7 +56,7 @@ class ProjectServiceImplTest {
         when(projectRepository.existsByCode("PLATFORM")).thenReturn(false);
         when(projectRepository.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = projectService.create(request);
+        var response = projectService.create(request, "Bearer test-token");
 
         assertThat(response.name()).isEqualTo("Platform");
         assertThat(response.code()).isEqualTo("PLATFORM");
@@ -69,7 +69,7 @@ class ProjectServiceImplTest {
         CreateProjectRequest request = request("Platform", "platform");
         when(projectRepository.existsByCode("PLATFORM")).thenReturn(true);
 
-        assertThatThrownBy(() -> projectService.create(request))
+        assertThatThrownBy(() -> projectService.create(request, "Bearer test-token"))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("PLATFORM");
         verify(projectRepository, never()).saveAndFlush(any(Project.class));
@@ -82,7 +82,7 @@ class ProjectServiceImplTest {
         when(projectRepository.saveAndFlush(any(Project.class)))
                 .thenThrow(new DataIntegrityViolationException("uq_projects_code"));
 
-        assertThatThrownBy(() -> projectService.create(request))
+        assertThatThrownBy(() -> projectService.create(request, "Bearer test-token"))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("PLATFORM");
     }

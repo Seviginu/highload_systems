@@ -45,7 +45,7 @@ class TaskControllerTest {
     void setUp() {
         client = WebTestClient.bindToController(new TaskController(taskService, new BlockingOperations(Schedulers.boundedElastic())))
                 .controllerAdvice(new GlobalExceptionHandler())
-                .build();
+                .configureClient().defaultHeader("Authorization", "Bearer test-token").build();
         response = new TaskResponse(
                 1L,
                 "PLATFORM-1",
@@ -65,7 +65,7 @@ class TaskControllerTest {
 
     @Test
     void shouldCreateTask() throws Exception {
-        when(taskService.create(any(CreateTaskRequest.class))).thenReturn(response);
+        when(taskService.create(any(CreateTaskRequest.class), org.mockito.ArgumentMatchers.anyString())).thenReturn(response);
 
         client.post().uri("http://localhost/api/v1/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -138,7 +138,7 @@ class TaskControllerTest {
 
     @Test
     void shouldUpdateTask() throws Exception {
-        when(taskService.update(any(Long.class), any(UpdateTaskRequest.class))).thenReturn(response);
+        when(taskService.update(any(Long.class), any(UpdateTaskRequest.class), org.mockito.ArgumentMatchers.anyString())).thenReturn(response);
 
         client.put().uri("http://localhost/api/v1/tasks/1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -149,7 +149,7 @@ class TaskControllerTest {
 
     @Test
     void shouldMoveTask() throws Exception {
-        when(taskService.move(any(Long.class), any(MoveTaskRequest.class))).thenReturn(response);
+        when(taskService.move(any(Long.class), any(MoveTaskRequest.class), org.mockito.ArgumentMatchers.anyString())).thenReturn(response);
 
         client.post().uri("http://localhost/api/v1/tasks/1/move")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -221,7 +221,7 @@ class TaskControllerTest {
 
     @Test
     void shouldReturnConflictError() throws Exception {
-        when(taskService.create(any(CreateTaskRequest.class)))
+        when(taskService.create(any(CreateTaskRequest.class), org.mockito.ArgumentMatchers.anyString()))
                 .thenThrow(new ConflictException("Task already exists"));
 
         client.post().uri("http://localhost/api/v1/tasks")
