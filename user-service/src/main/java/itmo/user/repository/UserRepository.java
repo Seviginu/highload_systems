@@ -1,6 +1,7 @@
 package itmo.user.repository;
 
 import itmo.user.entity.User;
+import itmo.user.entity.UserRole;
 import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import reactor.core.publisher.Flux;
@@ -9,6 +10,7 @@ import reactor.core.publisher.Mono;
 import java.util.Set;
 
 public interface UserRepository extends ReactiveCrudRepository<User, Long> {
+    Mono<Boolean> existsByRoleAndDeletedFalseAndPasswordHashIsNotNull(UserRole role);
     Mono<User> findByIdAndDeletedFalse(Long id);
     Flux<User> findAllByIdInAndDeletedFalse(Set<Long> ids);
     Mono<Boolean> existsByEmailIgnoreCase(String email);

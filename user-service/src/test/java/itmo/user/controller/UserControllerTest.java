@@ -108,7 +108,7 @@ class UserControllerTest {
 
     @Test
     void shouldReturnValidationErrors() {
-        client.post().uri("/api/v1/users").bodyValue(new CreateUserRequest(" ", "wrong-email", null))
+        client.post().uri("/api/v1/users").bodyValue(new CreateUserRequest(" ", "wrong-email", null, "Test-password-123"))
                 .exchange().expectStatus().isBadRequest().expectBody()
                 .jsonPath("$.message").isEqualTo("Request validation failed")
                 .jsonPath("$.path").isEqualTo("/api/v1/users").jsonPath("$.fieldErrors.length()").isEqualTo(3);
@@ -143,6 +143,6 @@ class UserControllerTest {
     }
 
     private CreateUserRequest request() {
-        return new CreateUserRequest("Alice", "alice@example.com", UserRole.DEVELOPER);
+        return new CreateUserRequest("Alice", "alice@example.com", UserRole.DEVELOPER, "Test-password-123");
     }
 }

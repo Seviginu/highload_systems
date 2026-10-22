@@ -8,6 +8,8 @@ import itmo.user.dto.UserResponse;
 import itmo.user.entity.User;
 import itmo.user.entity.UserRole;
 import itmo.user.mapper.UserMapper;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import reactor.core.scheduler.Schedulers;
 import itmo.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,7 +40,8 @@ class UserServiceContractTest {
 
     @BeforeEach
     void setUp() {
-        userService = new UserServiceImpl(userRepository, new UserMapper());
+        userService = new UserServiceImpl(userRepository, new UserMapper(),
+                new PasswordService(new BCryptPasswordEncoder(4), Schedulers.immediate()));
     }
 
     @Test
@@ -46,8 +49,7 @@ class UserServiceContractTest {
         CreateUserRequest request = new CreateUserRequest(
                 " Alice ",
                 "Alice@Example.COM",
-                UserRole.DEVELOPER
-        );
+                UserRole.DEVELOPER, "Test-password-123");
         when(userRepository.existsByEmailIgnoreCase("alice@example.com")).thenReturn(Mono.just(false));
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0, User.class)));
 
@@ -63,8 +65,7 @@ class UserServiceContractTest {
         CreateUserRequest request = new CreateUserRequest(
                 "Alice",
                 "Alice@Example.COM",
-                UserRole.DEVELOPER
-        );
+                UserRole.DEVELOPER, "Test-password-123");
         when(userRepository.existsByEmailIgnoreCase("alice@example.com")).thenReturn(Mono.just(true));
 
         assertThatThrownBy(() -> userService.create(request).block())
@@ -143,8 +144,7 @@ class UserServiceContractTest {
         CreateUserRequest request = new CreateUserRequest(
                 "Alice",
                 "alice@example.com",
-                UserRole.DEVELOPER
-        );
+                UserRole.DEVELOPER, "Test-password-123");
         when(userRepository.existsByEmailIgnoreCase("alice@example.com")).thenReturn(Mono.just(false));
         when(userRepository.save(any(User.class)))
                 .thenThrow(new DataIntegrityViolationException("uq_users_email_lower"));

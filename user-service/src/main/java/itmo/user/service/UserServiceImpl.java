@@ -25,6 +25,7 @@ import java.util.Set;
 public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final PasswordService passwords;
 
     @Override
     @Transactional
@@ -33,7 +34,11 @@ public class UserServiceImpl implements UserService {
             String email = userMapper.normalizeEmail(request.email());
             return userRepository.existsByEmailIgnoreCase(email)
                     .flatMap(exists -> exists ? Mono.error(emailConflict(email))
-                            : userRepository.save(userMapper.toEntity(request)))
+                            : passwords.encode(request.password()).flatMap(hash -> {
+                                User user = userMapper.toEntity(request);
+                                user.changePasswordHash(hash);
+                                return userRepository.save(user);
+                            }))
                     .map(userMapper::toResponse)
                     .onErrorMap(DataIntegrityViolationException.class, error -> translateEmailConflict(error, email));
         });

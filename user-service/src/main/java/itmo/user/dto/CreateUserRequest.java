@@ -1,6 +1,8 @@
 package itmo.user.dto;
 
 import itmo.user.entity.UserRole;
+import itmo.user.validation.ValidPassword;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -17,7 +19,16 @@ public record CreateUserRequest(
         String email,
 
         @NotNull(message = "Role is required")
-        UserRole role
+        UserRole role,
+
+        @ValidPassword
+        @Schema(accessMode = Schema.AccessMode.WRITE_ONLY, format = "password", minLength = 8,
+                description = "At least 8 characters and at most 72 UTF-8 bytes")
+        String password
 ) {
+    @Override
+    public String toString() {
+        return "CreateUserRequest[name=" + name + ", email=" + email + ", role=" + role + ", password=<redacted>]";
+    }
 }
 
