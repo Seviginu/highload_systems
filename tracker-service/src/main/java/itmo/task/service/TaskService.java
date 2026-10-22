@@ -1,6 +1,8 @@
 package itmo.task.service;
 
+import itmo.infrastructure.security.CurrentUser;
 import itmo.task.dto.CreateTaskRequest;
+import itmo.task.dto.ChangeTaskStatusRequest;
 import itmo.task.dto.MoveTaskRequest;
 import itmo.task.dto.TaskFeedResponse;
 import itmo.task.dto.TaskFilter;
@@ -10,8 +12,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface TaskService {
+    TaskResponse changeStatus(Long id, ChangeTaskStatusRequest request, CurrentUser actor);
 
-    TaskResponse create(CreateTaskRequest request, String authorization);
+    TaskResponse create(CreateTaskRequest request, CurrentUser actor);
 
     TaskResponse findById(Long id);
 
@@ -19,9 +22,9 @@ public interface TaskService {
 
     TaskFeedResponse findFeed(Long afterId, int limit);
 
-    TaskResponse move(Long id, MoveTaskRequest request, String authorization);
+    TaskResponse move(Long id, MoveTaskRequest request, CurrentUser actor);
 
-    TaskResponse update(Long id, UpdateTaskRequest request, String authorization);
+    TaskResponse update(Long id, UpdateTaskRequest request, CurrentUser actor);
 
-    void delete(Long id);
+    void delete(Long id, CurrentUser actor);
 }

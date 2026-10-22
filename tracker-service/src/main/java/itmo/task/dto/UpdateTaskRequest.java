@@ -32,10 +32,6 @@ public record UpdateTaskRequest(
         @NotNull(message = "Priority is required")
         TaskPriority priority,
 
-        @NotNull(message = "Author is required")
-        @Positive(message = "Author id must be positive")
-        Long authorId,
-
         @Positive(message = "Assignee id must be positive")
         Long assigneeId,
 

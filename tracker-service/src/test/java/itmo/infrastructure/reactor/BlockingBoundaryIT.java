@@ -96,8 +96,7 @@ class BlockingBoundaryIT {
         CountDownLatch release = new CountDownLatch(1);
         USERS.blockResponses(entered, release);
         probe.capture = true;
-        var request = new CreateTaskRequest("BOUNDARY-1", "Task", null, TaskStatus.TODO, TaskPriority.MEDIUM,
-                userId, null, projectId, Set.of());
+        var request = new CreateTaskRequest("BOUNDARY-1", "Task", null, TaskStatus.TODO, TaskPriority.MEDIUM, null, projectId, Set.of());
         var writing = CompletableFuture.supplyAsync(() -> client.postForEntity("/api/v1/tasks", request, TaskResponse.class));
         try {
             assertThat(entered.await(5, TimeUnit.SECONDS)).as("Feign request reached the blocked HTTP stub").isTrue();

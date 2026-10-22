@@ -40,7 +40,7 @@ class LabelServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        labelService = new LabelServiceImpl(labelRepository, new LabelMapper());
+        labelService = new LabelServiceImpl(itmo.support.TestActors.access(), labelRepository, new LabelMapper());
     }
 
     @Test
@@ -48,7 +48,7 @@ class LabelServiceImplTest {
         when(labelRepository.existsByNameIgnoreCase("Backend")).thenReturn(false);
         when(labelRepository.saveAndFlush(any(Label.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = labelService.create(new CreateLabelRequest(" Backend ", "#a1b2c3"));
+        var response = labelService.create(new CreateLabelRequest(" Backend ", "#a1b2c3"), itmo.support.TestActors.admin());
 
         assertThat(response.name()).isEqualTo("Backend");
         assertThat(response.color()).isEqualTo("#A1B2C3");
@@ -59,7 +59,7 @@ class LabelServiceImplTest {
         when(labelRepository.existsByNameIgnoreCase("backend")).thenReturn(true);
         CreateLabelRequest request = new CreateLabelRequest("backend", null);
 
-        assertThatThrownBy(() -> labelService.create(request))
+        assertThatThrownBy(() -> labelService.create(request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("backend");
         verify(labelRepository, never()).saveAndFlush(any(Label.class));
@@ -72,7 +72,7 @@ class LabelServiceImplTest {
                 .thenThrow(new DataIntegrityViolationException("uq_labels_name_lower"));
         CreateLabelRequest request = new CreateLabelRequest("Backend", null);
 
-        assertThatThrownBy(() -> labelService.create(request))
+        assertThatThrownBy(() -> labelService.create(request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class);
     }
 
@@ -136,7 +136,7 @@ class LabelServiceImplTest {
         when(labelRepository.existsByNameIgnoreCaseAndIdNot("API", 1L)).thenReturn(false);
         when(labelRepository.saveAndFlush(label)).thenReturn(label);
 
-        var response = labelService.update(1L, new UpdateLabelRequest(" API ", "#abcdef"));
+        var response = labelService.update(1L, new UpdateLabelRequest(" API ", "#abcdef"), itmo.support.TestActors.admin());
 
         assertThat(response.name()).isEqualTo("API");
         assertThat(response.color()).isEqualTo("#ABCDEF");
@@ -149,7 +149,7 @@ class LabelServiceImplTest {
         when(labelRepository.existsByNameIgnoreCaseAndIdNot("Frontend", 1L)).thenReturn(true);
         UpdateLabelRequest request = new UpdateLabelRequest("Frontend", null);
 
-        assertThatThrownBy(() -> labelService.update(1L, request))
+        assertThatThrownBy(() -> labelService.update(1L, request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class);
         verify(labelRepository, never()).saveAndFlush(label);
     }
@@ -163,7 +163,7 @@ class LabelServiceImplTest {
                 .thenThrow(new DataIntegrityViolationException("uq_labels_name_lower"));
         UpdateLabelRequest request = new UpdateLabelRequest("API", null);
 
-        assertThatThrownBy(() -> labelService.update(1L, request))
+        assertThatThrownBy(() -> labelService.update(1L, request, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class);
     }
 
@@ -172,7 +172,7 @@ class LabelServiceImplTest {
         Label label = label(null);
         when(labelRepository.findById(1L)).thenReturn(Optional.of(label));
 
-        labelService.delete(1L);
+        labelService.delete(1L, itmo.support.TestActors.admin());
 
         verify(labelRepository).delete(label);
         verify(labelRepository).flush();
@@ -184,7 +184,7 @@ class LabelServiceImplTest {
         when(labelRepository.findById(1L)).thenReturn(Optional.of(label));
         doThrow(new DataIntegrityViolationException("fk_task_labels_label")).when(labelRepository).flush();
 
-        assertThatThrownBy(() -> labelService.delete(1L))
+        assertThatThrownBy(() -> labelService.delete(1L, itmo.support.TestActors.admin()))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("referenced");
     }

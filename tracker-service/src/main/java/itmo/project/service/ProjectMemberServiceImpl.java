@@ -1,5 +1,7 @@
 package itmo.project.service;
 
+import itmo.infrastructure.security.CurrentUser;
+import itmo.infrastructure.security.TrackerAccess;
 import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
 import itmo.project.dto.AddProjectMemberRequest;
@@ -24,6 +26,8 @@ import static itmo.common.persistence.ConstraintViolationDetector.isViolationOf;
 @RequiredArgsConstructor
 public class ProjectMemberServiceImpl implements ProjectMemberService {
 
+    private final TrackerAccess access;
+
     private final ProjectMemberRepository memberRepository;
     private final ProjectRepository projectRepository;
     private final UserDirectory userDirectory;
@@ -31,9 +35,13 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     private final ProjectMemberMapper memberMapper;
 
     @Override
-    public ProjectMemberResponse add(Long projectId, AddProjectMemberRequest request, String authorization) {
-        userDirectory.requireUsers(authorization, request.userId());
-        return transactions.execute(status -> addMember(projectId, request.userId()));
+    public ProjectMemberResponse add(Long projectId, AddProjectMemberRequest request, CurrentUser actor) {
+        access.requireManager(actor);
+        userDirectory.requireUsers(actor.authorization(), request.userId());
+        return transactions.execute(status -> {
+            access.requireProjectManager(projectId, actor);
+            return addMember(projectId, request.userId());
+        });
     }
 
     @Override
@@ -57,7 +65,8 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
 
     @Override
     @Transactional
-    public void deactivate(Long projectId, Long memberId) {
+    public void deactivate(Long projectId, Long memberId, CurrentUser actor) {
+        access.requireProjectManager(projectId, actor);
         ensureProjectExists(projectId);
         ProjectMember member = memberRepository.findByIdAndProjectId(memberId, projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project member", memberId));

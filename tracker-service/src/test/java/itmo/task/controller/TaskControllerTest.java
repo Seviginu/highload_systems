@@ -44,6 +44,7 @@ class TaskControllerTest {
     @BeforeEach
     void setUp() {
         client = WebTestClient.bindToController(new TaskController(taskService, new BlockingOperations(Schedulers.boundedElastic())))
+                .webFilter(itmo.support.TestActors.context())
                 .controllerAdvice(new GlobalExceptionHandler())
                 .configureClient().defaultHeader("Authorization", "Bearer test-token").build();
         response = new TaskResponse(
@@ -65,7 +66,7 @@ class TaskControllerTest {
 
     @Test
     void shouldCreateTask() throws Exception {
-        when(taskService.create(any(CreateTaskRequest.class), org.mockito.ArgumentMatchers.anyString())).thenReturn(response);
+        when(taskService.create(any(CreateTaskRequest.class), org.mockito.ArgumentMatchers.any(itmo.infrastructure.security.CurrentUser.class))).thenReturn(response);
 
         client.post().uri("http://localhost/api/v1/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -138,7 +139,7 @@ class TaskControllerTest {
 
     @Test
     void shouldUpdateTask() throws Exception {
-        when(taskService.update(any(Long.class), any(UpdateTaskRequest.class), org.mockito.ArgumentMatchers.anyString())).thenReturn(response);
+        when(taskService.update(any(Long.class), any(UpdateTaskRequest.class), org.mockito.ArgumentMatchers.any(itmo.infrastructure.security.CurrentUser.class))).thenReturn(response);
 
         client.put().uri("http://localhost/api/v1/tasks/1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -149,7 +150,7 @@ class TaskControllerTest {
 
     @Test
     void shouldMoveTask() throws Exception {
-        when(taskService.move(any(Long.class), any(MoveTaskRequest.class), org.mockito.ArgumentMatchers.anyString())).thenReturn(response);
+        when(taskService.move(any(Long.class), any(MoveTaskRequest.class), org.mockito.ArgumentMatchers.any(itmo.infrastructure.security.CurrentUser.class))).thenReturn(response);
 
         client.post().uri("http://localhost/api/v1/tasks/1/move")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -187,7 +188,7 @@ class TaskControllerTest {
                 .expectStatus().isNoContent()
                 .expectBody().isEmpty();
 
-        verify(taskService).delete(1L);
+        verify(taskService).delete(1L, itmo.support.TestActors.admin());
     }
 
     @Test
@@ -221,7 +222,7 @@ class TaskControllerTest {
 
     @Test
     void shouldReturnConflictError() throws Exception {
-        when(taskService.create(any(CreateTaskRequest.class), org.mockito.ArgumentMatchers.anyString()))
+        when(taskService.create(any(CreateTaskRequest.class), org.mockito.ArgumentMatchers.any(itmo.infrastructure.security.CurrentUser.class)))
                 .thenThrow(new ConflictException("Task already exists"));
 
         client.post().uri("http://localhost/api/v1/tasks")

@@ -1,5 +1,7 @@
 package itmo.project.service;
 
+import itmo.infrastructure.security.CurrentUser;
+import itmo.infrastructure.security.TrackerAccess;
 import itmo.common.exception.ConflictException;
 import itmo.common.exception.ResourceNotFoundException;
 import itmo.project.dto.CreateProjectRequest;
@@ -15,13 +17,18 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Objects;
 
 import static itmo.common.persistence.ConstraintViolationDetector.isViolationOf;
 
 @Service
 @RequiredArgsConstructor
 public class ProjectServiceImpl implements ProjectService {
+
+    private final TrackerAccess access;
 
     private final ProjectRepository projectRepository;
     private final ProjectMapper projectMapper;
@@ -30,8 +37,12 @@ public class ProjectServiceImpl implements ProjectService {
     private final TransactionOperations transactions;
 
     @Override
-    public ProjectResponse create(CreateProjectRequest request, String authorization) {
-        userDirectory.requireTeamLead(authorization, request.teamLeadId());
+    public ProjectResponse create(CreateProjectRequest request, CurrentUser actor) {
+        access.requireManager(actor);
+        if (!actor.isAdmin() && !Objects.equals(request.teamLeadId(), actor.id())) {
+            throw new AccessDeniedException("A team lead can only assign themselves");
+        }
+        userDirectory.requireTeamLead(actor.authorization(), request.teamLeadId());
         return transactions.execute(transactionStatus -> {
             String normalizedCode = projectMapper.normalizeCode(request.code());
             ensureCodeAvailable(normalizedCode);
@@ -69,7 +80,8 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional
-    public ProjectResponse update(Long id, UpdateProjectRequest request) {
+    public ProjectResponse update(Long id, UpdateProjectRequest request, CurrentUser actor) {
+        access.requireProjectManager(id, actor);
         Project project = findEntity(id);
         String normalizedCode = projectMapper.normalizeCode(request.code());
 
@@ -90,7 +102,8 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional
-    public void delete(Long id) {
+    public void delete(Long id, CurrentUser actor) {
+        access.requireProjectManager(id, actor);
         Project project = findEntity(id);
         try {
             projectRepository.delete(project);

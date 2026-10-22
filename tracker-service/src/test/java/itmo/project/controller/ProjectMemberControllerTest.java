@@ -36,6 +36,7 @@ class ProjectMemberControllerTest {
     @BeforeEach
     void setUp() {
         client = WebTestClient.bindToController(new ProjectMemberController(memberService, new BlockingOperations(Schedulers.boundedElastic())))
+                .webFilter(itmo.support.TestActors.context())
                 .controllerAdvice(new GlobalExceptionHandler())
                 .configureClient().defaultHeader("Authorization", "Bearer test-token").build();
         response = new ProjectMemberResponse(
@@ -49,7 +50,7 @@ class ProjectMemberControllerTest {
 
     @Test
     void shouldAddMember() throws Exception {
-        when(memberService.add(any(Long.class), any(AddProjectMemberRequest.class), org.mockito.ArgumentMatchers.anyString())).thenReturn(response);
+        when(memberService.add(any(Long.class), any(AddProjectMemberRequest.class), org.mockito.ArgumentMatchers.any(itmo.infrastructure.security.CurrentUser.class))).thenReturn(response);
 
         client.post().uri("http://localhost/api/v1/projects/1/members")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -79,7 +80,7 @@ class ProjectMemberControllerTest {
         client.delete().uri("/api/v1/projects/1/members/3").exchange()
                 .expectStatus().isNoContent();
 
-        verify(memberService).deactivate(1L, 3L);
+        verify(memberService).deactivate(1L, 3L, itmo.support.TestActors.admin());
     }
 
     @Test

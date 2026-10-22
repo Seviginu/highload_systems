@@ -103,10 +103,13 @@ class TaskIT {
     @Autowired
     private StringRedisTemplate redisTemplate;
 
+    private long currentUserId = 1;
+
     @BeforeEach
     void cleanDatabase() {
+        currentUserId = 1;
         restTemplate.getRestTemplate().setInterceptors(java.util.List.of((request, body, execution) -> {
-            request.getHeaders().set("Authorization", itmo.security.TestTokens.bearer());
+            request.getHeaders().set("Authorization", itmo.security.TestTokens.bearer(currentUserId, "ADMIN"));
             return execution.execute(request, body);
         }));
         taskCache().clear();
@@ -162,7 +165,6 @@ class TaskIT {
                         created.description(),
                         created.status(),
                         created.priority(),
-                        created.authorId(),
                         created.assigneeId(),
                         created.projectId(),
                         Set.copyOf(created.labelIds()),
@@ -238,7 +240,6 @@ class TaskIT {
                 null,
                 TaskStatus.IN_PROGRESS,
                 TaskPriority.CRITICAL,
-                data.author().getId(),
                 null,
                 data.project().getId(),
                 Set.of(),
@@ -298,7 +299,6 @@ class TaskIT {
                         null,
                         TaskStatus.DONE,
                         TaskPriority.LOW,
-                        data.author().getId(),
                         data.assignee().getId(),
                         data.project().getId(),
                         Set.of(data.label().getId())
@@ -317,6 +317,8 @@ class TaskIT {
         Project anotherProject = projectRepository.saveAndFlush(
                 new Project("Mobile", "MOBILE", null, ProjectStatus.ACTIVE)
         );
+        projectMemberRepository.saveAndFlush(new ProjectMember(anotherProject, anotherAssignee.getId()));
+        currentUserId = anotherAuthor.getId();
         Label anotherLabel = labelRepository.saveAndFlush(new Label("Mobile", "#445566"));
         restTemplate.postForEntity(
                 "/api/v1/tasks",
@@ -326,7 +328,6 @@ class TaskIT {
                         null,
                         TaskStatus.TODO,
                         TaskPriority.HIGH,
-                        anotherAuthor.getId(),
                         anotherAssignee.getId(),
                         anotherProject.getId(),
                         Set.of(anotherLabel.getId())
@@ -334,6 +335,7 @@ class TaskIT {
                 TaskResponse.class
         );
 
+        currentUserId = data.author().getId();
         String combinedFilter = "/api/v1/tasks?projectId=%d&authorId=%d&assigneeId=%d&labelId=%d"
                 .formatted(
                         data.project().getId(),
@@ -390,7 +392,6 @@ class TaskIT {
                         null,
                         TaskStatus.TODO,
                         TaskPriority.MEDIUM,
-                        author.getId(),
                         null,
                         999_999L,
                         Set.of()
@@ -524,7 +525,6 @@ class TaskIT {
                         created.description(),
                         created.status(),
                         created.priority(),
-                        created.authorId(),
                         created.assigneeId(),
                         targetProject.getId(),
                         Set.copyOf(created.labelIds()),
@@ -608,7 +608,7 @@ class TaskIT {
         assertThat(read.getBody().assigneeId()).isEqualTo(data.assignee().getId());
         var update = restTemplate.exchange("/api/v1/tasks/{id}", HttpMethod.PUT,
                 new HttpEntity<>(new UpdateTaskRequest(created.taskKey(), "Edited history", created.description(),
-                        created.status(), created.priority(), created.authorId(), created.assigneeId(), created.projectId(),
+                        created.status(), created.priority(), created.assigneeId(), created.projectId(),
                         Set.copyOf(created.labelIds()), created.version())), TaskResponse.class, created.id());
         assertThat(update.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(update.getBody().title()).isEqualTo("Edited history");
@@ -639,6 +639,8 @@ class TaskIT {
         Project project = projectRepository.saveAndFlush(
                 new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE)
         );
+        currentUserId = author.getId();
+        projectMemberRepository.saveAndFlush(new ProjectMember(project, assignee.getId()));
         Label label = labelRepository.saveAndFlush(new Label("Backend", "#112233"));
         return new TestData(author, assignee, project, label);
     }
@@ -650,7 +652,6 @@ class TaskIT {
                 "Description",
                 TaskStatus.TODO,
                 TaskPriority.HIGH,
-                data.author().getId(),
                 data.assignee().getId(),
                 data.project().getId(),
                 Set.of(data.label().getId())
