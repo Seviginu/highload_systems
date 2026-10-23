@@ -35,6 +35,7 @@ spring.cloud.openfeign.client.config.user-service:
 
 spring.cloud.openfeign.circuitbreaker.enabled: true
 # Feign socket timeouts bound the synchronous call on tracker-blocking.
+spring.cloud.circuitbreaker.resilience4j.disable-thread-pool: true
 spring.cloud.circuitbreaker.resilience4j.disable-time-limiter: true
 spring.cloud.circuitbreaker.bulkhead.resilience4j.enabled: false
 

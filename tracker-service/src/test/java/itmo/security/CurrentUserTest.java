@@ -17,13 +17,12 @@ class CurrentUserTest {
     }
 
     @Test
-    void shouldKeepRolesImmutableAndRedactAuthorization() {
+    void shouldKeepRolesImmutable() {
         var roles = new HashSet<>(Set.of("TEAM_LEAD"));
-        var actor = new CurrentUser(1, roles, "Bearer secret-token");
+        var actor = new CurrentUser(1, roles);
         roles.add("ADMIN");
         assertThat(actor.roles()).containsExactly("TEAM_LEAD");
         assertThat(actor.isAdmin()).isFalse();
         assertThat(actor.isTeamLead()).isTrue();
-        assertThat(actor.toString()).doesNotContain("secret-token").contains("<redacted>");
     }
 }

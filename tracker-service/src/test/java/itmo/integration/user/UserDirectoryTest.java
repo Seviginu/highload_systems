@@ -27,32 +27,32 @@ class UserDirectoryTest {
 
     @Test
     void shouldAcceptTeamLead() {
-        when(client.resolve("Bearer test-token", new ResolveUsersRequest(Set.of(1L))))
+        when(client.resolve(new ResolveUsersRequest(Set.of(1L))))
                 .thenReturn(List.of(new UserReference(1L, "TEAM_LEAD")));
-        assertThatCode(() -> new UserDirectory(client).requireTeamLead("Bearer test-token", 1L)).doesNotThrowAnyException();
+        assertThatCode(() -> new UserDirectory(client).requireTeamLead(1L)).doesNotThrowAnyException();
     }
 
     @Test
     void shouldRejectWrongRole() {
-        when(client.resolve("Bearer test-token", new ResolveUsersRequest(Set.of(1L))))
+        when(client.resolve(new ResolveUsersRequest(Set.of(1L))))
                 .thenReturn(List.of(new UserReference(1L, "DEVELOPER")));
-        assertThatThrownBy(() -> new UserDirectory(client).requireTeamLead("Bearer test-token", 1L))
+        assertThatThrownBy(() -> new UserDirectory(client).requireTeamLead(1L))
                 .isInstanceOf(ConflictException.class).hasMessageContaining("not a team lead");
     }
 
     @Test
     void shouldReportMissingOrDeletedUserFromSuccessfulBatch() {
-        when(client.resolve("Bearer test-token", new ResolveUsersRequest(Set.of(1L, 2L))))
+        when(client.resolve(new ResolveUsersRequest(Set.of(1L, 2L))))
                 .thenReturn(List.of(new UserReference(1L, "ADMIN")));
-        assertThatThrownBy(() -> new UserDirectory(client).requireUsers("Bearer test-token", 1L, 2L))
+        assertThatThrownBy(() -> new UserDirectory(client).requireUsers(1L, 2L))
                 .isInstanceOf(ResourceNotFoundException.class).hasMessageContaining("'2'");
     }
 
     @Test
     void shouldTranslateCircuitBreakerRejection() {
         var failure = new NoFallbackAvailableException("No fallback", new IllegalStateException("Circuit open"));
-        when(client.resolve("Bearer test-token", new ResolveUsersRequest(Set.of(1L)))).thenThrow(failure);
-        assertThatThrownBy(() -> new UserDirectory(client).requireUsers("Bearer test-token", 1L))
+        when(client.resolve(new ResolveUsersRequest(Set.of(1L)))).thenThrow(failure);
+        assertThatThrownBy(() -> new UserDirectory(client).requireUsers(1L))
                 .isInstanceOf(DependencyUnavailableException.class)
                 .hasMessage("User service is unavailable").hasCause(failure);
     }
@@ -61,9 +61,9 @@ class UserDirectoryTest {
     void shouldTranslateTransportFailureInsteadOfAcceptingUnverifiedUsers() {
         Request request = Request.create(Request.HttpMethod.POST, "/internal/users/resolve", Map.of(),
                 (byte[]) null, StandardCharsets.UTF_8, null);
-        when(client.resolve("Bearer test-token", new ResolveUsersRequest(Set.of(1L))))
+        when(client.resolve(new ResolveUsersRequest(Set.of(1L))))
                 .thenThrow(new FeignException.ServiceUnavailable("Unavailable", request, null, Map.of()));
-        assertThatThrownBy(() -> new UserDirectory(client).requireUsers("Bearer test-token", 1L))
+        assertThatThrownBy(() -> new UserDirectory(client).requireUsers(1L))
                 .isInstanceOf(DependencyUnavailableException.class);
     }
 }

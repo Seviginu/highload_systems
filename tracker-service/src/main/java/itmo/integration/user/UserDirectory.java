@@ -22,24 +22,24 @@ import java.util.stream.Collectors;
 public class UserDirectory {
     private final UserClient userClient;
 
-    public void requireUsers(String authorization, Long... ids) {
-        resolve(authorization, ids);
+    public void requireUsers(Long... ids) {
+        resolve(ids);
     }
 
-    public void requireTeamLead(String authorization, Long id) {
-        if (!"TEAM_LEAD".equals(resolve(authorization, id).get(id).role())) {
+    public void requireTeamLead(Long id) {
+        if (!"TEAM_LEAD".equals(resolve(id).get(id).role())) {
             throw new ConflictException("User with id '%d' is not a team lead".formatted(id));
         }
     }
 
-    private Map<Long, UserReference> resolve(String authorization, Long... values) {
+    private Map<Long, UserReference> resolve(Long... values) {
         Set<Long> ids = Arrays.stream(values).filter(Objects::nonNull).collect(Collectors.toSet());
         if (ids.isEmpty()) {
             return Map.of();
         }
         Map<Long, UserReference> users = new HashMap<>();
         try {
-            for (UserReference user : userClient.resolve(authorization, new ResolveUsersRequest(ids))) {
+            for (UserReference user : userClient.resolve(new ResolveUsersRequest(ids))) {
                 users.put(user.id(), user);
             }
         } catch (FeignException | NoFallbackAvailableException error) {

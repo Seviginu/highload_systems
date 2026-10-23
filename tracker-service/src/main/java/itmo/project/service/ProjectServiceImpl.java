@@ -42,7 +42,7 @@ public class ProjectServiceImpl implements ProjectService {
         if (!actor.isAdmin() && !Objects.equals(request.teamLeadId(), actor.id())) {
             throw new AccessDeniedException("A team lead can only assign themselves");
         }
-        userDirectory.requireTeamLead(actor.authorization(), request.teamLeadId());
+        userDirectory.requireTeamLead(request.teamLeadId());
         return transactions.execute(transactionStatus -> {
             String normalizedCode = projectMapper.normalizeCode(request.code());
             ensureCodeAvailable(normalizedCode);

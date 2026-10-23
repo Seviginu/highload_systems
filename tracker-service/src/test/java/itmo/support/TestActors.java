@@ -17,7 +17,7 @@ public final class TestActors {
     private TestActors() { }
 
     public static CurrentUser admin() {
-        return new CurrentUser(2, Set.of("ADMIN"), "Bearer test-token");
+        return new CurrentUser(2, Set.of("ADMIN"));
     }
 
     public static TrackerAccess access() {

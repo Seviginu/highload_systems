@@ -58,7 +58,7 @@ public class TaskServiceImpl implements TaskService {
     @CachePut(cacheNames = TASKS_CACHE, key = "#result.id()")
     public TaskResponse create(CreateTaskRequest request, CurrentUser actor) {
         access.requireManager(actor);
-        userDirectory.requireUsers(actor.authorization(), actor.id(), request.assigneeId());
+        userDirectory.requireUsers(actor.id(), request.assigneeId());
         return transactions.execute(transactionStatus -> {
             access.requireProjectManager(request.projectId(), actor);
             String normalizedKey = taskMapper.normalizeTaskKey(request.taskKey());
@@ -124,7 +124,7 @@ public class TaskServiceImpl implements TaskService {
     @CachePut(cacheNames = TASKS_CACHE, key = "#id")
     public TaskResponse move(Long id, MoveTaskRequest request, CurrentUser actor) {
         access.requireManager(actor);
-        userDirectory.requireUsers(actor.authorization(), request.assigneeId());
+        userDirectory.requireUsers(request.assigneeId());
         return transactions.execute(transactionStatus -> {
             Task task = findEntity(id);
             access.requireProjectManager(task.getProject().getId(), actor);
@@ -159,7 +159,7 @@ public class TaskServiceImpl implements TaskService {
         if (!Objects.equals(current.version(), request.version())) {
             throw versionConflict(id);
         }
-        userDirectory.requireUsers(actor.authorization(),
+        userDirectory.requireUsers(
                 Objects.equals(current.assigneeId(), request.assigneeId()) ? null : request.assigneeId());
         return transactions.execute(transactionStatus -> {
             Task task = findEntity(id);

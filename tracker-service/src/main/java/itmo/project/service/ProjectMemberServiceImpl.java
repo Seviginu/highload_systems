@@ -37,7 +37,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     @Override
     public ProjectMemberResponse add(Long projectId, AddProjectMemberRequest request, CurrentUser actor) {
         access.requireManager(actor);
-        userDirectory.requireUsers(actor.authorization(), request.userId());
+        userDirectory.requireUsers(request.userId());
         return transactions.execute(status -> {
             access.requireProjectManager(projectId, actor);
             return addMember(projectId, request.userId());

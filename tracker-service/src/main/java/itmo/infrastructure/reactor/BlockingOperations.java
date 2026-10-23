@@ -2,12 +2,15 @@ package itmo.infrastructure.reactor;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+import org.springframework.security.concurrent.DelegatingSecurityContextCallable;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.security.core.context.SecurityContextImpl;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 
 import java.util.concurrent.Callable;
 
-/** Keeps synchronous service proxies, their transactions and cache access on a worker. */
+/** Runs synchronous service proxies on a worker with a scoped security context. */
 @Component
 public class BlockingOperations {
     private final Scheduler scheduler;
@@ -17,10 +20,16 @@ public class BlockingOperations {
     }
 
     public <T> Mono<T> call(Callable<T> operation) {
-        return Mono.fromCallable(operation).subscribeOn(scheduler);
+        return ReactiveSecurityContextHolder.getContext()
+                .defaultIfEmpty(new SecurityContextImpl())
+                .flatMap(context -> Mono.fromCallable(new DelegatingSecurityContextCallable<>(operation, context))
+                        .subscribeOn(scheduler));
     }
 
     public Mono<Void> run(Runnable operation) {
-        return Mono.<Void>fromRunnable(operation).subscribeOn(scheduler);
+        return this.<Void>call(() -> {
+            operation.run();
+            return null;
+        });
     }
 }
