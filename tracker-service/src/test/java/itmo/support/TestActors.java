@@ -1,8 +1,8 @@
 package itmo.support;
 
-import itmo.infrastructure.security.CurrentUser;
-import itmo.infrastructure.security.TrackerAccess;
-import itmo.project.repository.ProjectMemberRepository;
+import itmo.tracker.application.model.Actor;
+import itmo.tracker.application.service.TrackerAccess;
+import itmo.tracker.application.port.out.ProjectMemberStore;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -16,12 +16,12 @@ import static org.mockito.Mockito.mock;
 public final class TestActors {
     private TestActors() { }
 
-    public static CurrentUser admin() {
-        return new CurrentUser(2, Set.of("ADMIN"));
+    public static Actor admin() {
+        return new Actor(2, Set.of("ADMIN"));
     }
 
     public static TrackerAccess access() {
-        return new TrackerAccess(mock(ProjectMemberRepository.class));
+        return new TrackerAccess(mock(ProjectMemberStore.class));
     }
 
     /** Controller unit tests provide a verified principal; HTTP integration tests validate real JWTs. */

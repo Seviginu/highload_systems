@@ -43,7 +43,7 @@ resilience4j:
   circuitbreaker:
     instances:
       userDirectory:
-        ignore-exception-predicate: itmo.integration.user.UserAuthorizationFailurePredicate
+        ignore-exception-predicate: itmo.tracker.adapter.out.user.UserAuthorizationFailurePredicate
         slidingWindowType: COUNT_BASED
         slidingWindowSize: 10
         minimumNumberOfCalls: 10

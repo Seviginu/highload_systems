@@ -2,15 +2,15 @@
 
 Состояние реализации: этапы 1–6 в `main`, включая merge-коммит `7416c28`. Этот документ завершает этап 7. Порядок запуска и матрица прав приведены в [README](../README.md).
 
-После этапа 1 ЛР4 ссылки на код user-service актуализированы под Clean Architecture. Результаты сдачи ЛР3 ниже сохранены как исторические; текущая проверка описана в [плане ЛР4](../IMPLEMENTATION_PLAN_LAB4.md).
+После этапов 1–2 ЛР4 ссылки на код user-service и tracker-service актуализированы под Clean Architecture. Результаты сдачи ЛР3 ниже сохранены как исторические; текущая проверка описана в [плане ЛР4](../IMPLEMENTATION_PLAN_LAB4.md).
 
 ## Требования ЛР3
 
 | Требование | Реализация | Подтверждение |
 |---|---|---|
 | Spring Security и JWT в Authorization | Login в user-service; RS256; независимая проверка JWT в Gateway и обоих сервисах | [JwtSecurityConfiguration](../security-common/src/main/java/itmo/security/JwtSecurityConfiguration.java), [GatewaySecurityTest](../api-gateway/src/test/java/itmo/gateway/GatewaySecurityTest.java), [UserIT](../user-service/src/test/java/itmo/user/UserIT.java) |
-| Ролевая модель | ADMIN — супервайзер, TEAM_LEAD — тимлид, DEVELOPER — разработчик | [TrackerAccess](../tracker-service/src/main/java/itmo/infrastructure/security/TrackerAccess.java), матрица в README |
-| Логика зависит от текущего пользователя | Автор задачи из JWT; тимлид управляет проектами с активным членством; разработчик меняет статус назначенной ему задачи | [CurrentUser](../tracker-service/src/main/java/itmo/infrastructure/security/CurrentUser.java), [TaskServiceImpl](../tracker-service/src/main/java/itmo/task/service/TaskServiceImpl.java), [PermissionsIT](../tracker-service/src/test/java/itmo/security/PermissionsIT.java) |
+| Ролевая модель | ADMIN — супервайзер, TEAM_LEAD — тимлид, DEVELOPER — разработчик | [TrackerAccess](../tracker-service/src/main/java/itmo/tracker/application/service/TrackerAccess.java), матрица в README |
+| Логика зависит от текущего пользователя | Автор задачи из JWT; тимлид управляет проектами с активным членством; разработчик меняет статус назначенной ему задачи | [CurrentUser](../tracker-service/src/main/java/itmo/tracker/adapter/in/web/CurrentUser.java), [TaskServiceImpl](../tracker-service/src/main/java/itmo/tracker/application/service/TaskServiceImpl.java), [PermissionsIT](../tracker-service/src/test/java/itmo/security/PermissionsIT.java) |
 | Пароль отсутствует в ответах пользователя | Отдельные UserResponse и UserReference; хэш скрыт при сериализации Entity | [UserResponse](../user-service/src/main/java/itmo/user/adapter/in/web/UserResponse.java), [UserIT](../user-service/src/test/java/itmo/user/UserIT.java): `shouldHashPasswordAndNeverReturnCredentials` |
 | Хэшированное хранение | BCrypt, поле password_hash; существующие записи остаются без учетных данных до назначения пароля | [PasswordService](../user-service/src/main/java/itmo/user/adapter/out/security/PasswordService.java), [миграция](../user-service/src/main/resources/db/changelog/002-add-password-hash.sql), [UserMigrationIT](../user-service/src/test/java/itmo/user/UserMigrationIT.java) |
 | Создание пользователей только супервайзером | ADMIN-only маршруты и сервисные проверки; первый ADMIN создается явно включаемым bootstrap | [ManagedUserService](../user-service/src/main/java/itmo/user/configuration/ManagedUserService.java), [AdminBootstrap](../user-service/src/main/java/itmo/user/configuration/AdminBootstrap.java), [UserIT](../user-service/src/test/java/itmo/user/UserIT.java): `shouldRestrictUserManagementToSupervisorIncludingPasswordAssignment` |
@@ -30,9 +30,9 @@
 | Транзакции сложных операций | Создание проекта с участником и перенос задачи выполняются атомарно; обоснование ниже |
 | Связи и строковые enums | Project–Task — OneToMany/ManyToOne; Task–Label — ManyToMany; ProjectMember хранит связь проекта с пользователем и поля active/joined_at. JPA enums — EnumType.STRING, роль пользователя — строка в БД |
 | Декомпозиция и инфраструктура | user-service, tracker-service, Eureka, Config Server и Gateway сохранены; security-common — библиотека, отдельного процесса у нее нет |
-| Feign и Circuit Breaker | [UserClient](../tracker-service/src/main/java/itmo/integration/user/UserClient.java) передает JWT; [UserCircuitBreakerIT](../tracker-service/src/test/java/itmo/integration/user/UserCircuitBreakerIT.java) проверяет CLOSED/OPEN/HALF_OPEN и исключение 401/403 из сбоев доступности |
+| Feign и Circuit Breaker | [UserClient](../tracker-service/src/main/java/itmo/tracker/adapter/out/user/UserClient.java) передает JWT; [UserCircuitBreakerIT](../tracker-service/src/test/java/itmo/tracker/adapter/out/user/UserCircuitBreakerIT.java) проверяет CLOSED/OPEN/HALF_OPEN и исключение 401/403 из сбоев доступности |
 | Reactor + R2DBC | user-service: Mono/Flux и реактивные репозитории |
-| Reactor + JPA | tracker-service: WebFlux с JPA/Feign/Redis на worker scheduler; [BlockingBoundaryIT](../tracker-service/src/test/java/itmo/infrastructure/reactor/BlockingBoundaryIT.java) проверяет границу потоков и транзакций |
+| Reactor + JPA | tracker-service: WebFlux с JPA/Feign/Redis на worker scheduler; [BlockingBoundaryIT](../tracker-service/src/test/java/itmo/tracker/adapter/in/web/BlockingBoundaryIT.java) проверяет границу потоков и транзакций |
 | Общий Swagger/OpenAPI | Единый Swagger через Gateway; две схемы с Bearer JWT; скрипт запуска ожидает их доступность |
 | Тесты и покрытие | JUnit Jupiter, PostgreSQL/Redis Testcontainers, порог JaCoCo 70%; фактические результаты ниже |
 | Feature branching и conventional commits | Изменения ЛР3 вносились feature-ветками и merge-коммитами в main |
