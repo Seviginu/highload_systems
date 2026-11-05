@@ -38,13 +38,14 @@
 ./scripts/docker-up.sh
 ```
 
-Скрипт дополнительно ожидает завершения `kafka-init` и проверяет его exit code. Для одноразового сервиса без healthcheck одного `up --wait` недостаточно, чтобы подтвердить завершение инициализации; это проверено на установленном Docker Compose v5.5.1.
+Скрипт дополнительно ожидает завершения `kafka-init` и проверяет его exit code. На Docker Compose v5.5.1 `up --wait` может как вернуться до завершения init, так и отклонить его успешный exit(0), если другие сервисы стартуют дольше. Поэтому startup разделен на `up -d`, проверку exit code init и ожидание healthy долгоживущих сервисов.
 
 Только Kafka, без сборки и запуска бизнес-сервисов:
 
 ```bash
-docker compose up -d --wait --wait-timeout 180 kafka-1 kafka-2 kafka-3 kafka-init
+docker compose up -d kafka-1 kafka-2 kafka-3 kafka-init
 docker wait "$(docker compose ps -aq kafka-init)"
+docker compose up -d --wait --wait-timeout 180 kafka-1 kafka-2 kafka-3
 docker compose logs kafka-init
 ```
 

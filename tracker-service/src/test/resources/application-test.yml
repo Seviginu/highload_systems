@@ -13,6 +13,8 @@ eureka:
 
 ---
 app:
+  outbox:
+    enabled: false
   jwt:
     public-key: classpath:keys/test-public.pem
     issuer: http://task-tracker

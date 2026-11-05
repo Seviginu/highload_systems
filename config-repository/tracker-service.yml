@@ -1,4 +1,12 @@
 spring:
+  kafka:
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/vs_lab1}
     username: ${DB_USERNAME:vs_lab1}

@@ -16,6 +16,9 @@
     <description>Task tracker application</description>
 
     <dependencies>
+        <dependency><groupId>itmo</groupId><artifactId>event-contracts</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.springframework.kafka</groupId><artifactId>spring-kafka</artifactId></dependency>
+
         <dependency>
             <groupId>itmo</groupId>
             <artifactId>security-common</artifactId>
@@ -128,6 +131,7 @@
             <artifactId>postgresql</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency><groupId>org.testcontainers</groupId><artifactId>kafka</artifactId><scope>test</scope></dependency>
     </dependencies>
 
     <build>

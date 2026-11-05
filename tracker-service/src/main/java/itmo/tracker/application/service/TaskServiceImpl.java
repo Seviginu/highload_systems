@@ -10,6 +10,7 @@ import itmo.tracker.application.model.MoveTaskCommand;
 import itmo.tracker.application.model.PageQuery;
 import itmo.tracker.application.model.ResultPage;
 import itmo.tracker.application.model.ResultSlice;
+import itmo.tracker.application.model.TaskAssignment;
 import itmo.tracker.application.model.TaskFeedView;
 import itmo.tracker.application.model.TaskFilter;
 import itmo.tracker.application.model.TaskView;
@@ -18,6 +19,7 @@ import itmo.tracker.application.port.in.*;
 import itmo.tracker.application.port.in.LabelService;
 import itmo.tracker.application.port.in.ProjectMemberService;
 import itmo.tracker.application.port.in.ProjectService;
+import itmo.tracker.application.port.out.TaskAssignments;
 import itmo.tracker.application.port.out.TaskStore;
 import itmo.tracker.application.port.out.UnitOfWork;
 import itmo.tracker.application.port.out.UserDirectoryPort;
@@ -37,7 +39,8 @@ public class TaskServiceImpl implements TaskService {
             ProjectMemberService projectMemberService,
             UserDirectoryPort userDirectory,
             UnitOfWork transactions,
-            LabelService labelService) {
+            LabelService labelService,
+            TaskAssignments assignments) {
         this.access = access;
         this.taskRepository = taskRepository;
         this.taskMapper = taskMapper;
@@ -46,6 +49,7 @@ public class TaskServiceImpl implements TaskService {
         this.userDirectory = userDirectory;
         this.transactions = transactions;
         this.labelService = labelService;
+        this.assignments = assignments;
     }
 
     private final TrackerAccess access;
@@ -57,6 +61,7 @@ public class TaskServiceImpl implements TaskService {
     private final UserDirectoryPort userDirectory;
     private final UnitOfWork transactions;
     private final LabelService labelService;
+    private final TaskAssignments assignments;
 
     @Override
     public TaskView create(CreateTaskCommand request, Actor actor) {
@@ -75,7 +80,9 @@ public class TaskServiceImpl implements TaskService {
                     Set<Label> labels = resolveLabels(request.labelIds());
 
                     Task task = taskMapper.toDomain(request, author, assignee, project, labels);
-                    return taskMapper.toResponse(taskRepository.save(task));
+                    Task saved = taskRepository.save(task);
+                    appendAssignment(saved, null, actor);
+                    return taskMapper.toResponse(saved);
                 });
     }
 
@@ -137,9 +144,12 @@ public class TaskServiceImpl implements TaskService {
                     Long assignee = request.assigneeId();
                     requireAssigneeMember(request.projectId(), assignee);
                     Set<Label> labels = resolveLabels(request.labelIds());
+                    Long previousAssignee = task.getAssigneeId();
                     task.move(project, assignee, labels);
 
-                    return taskMapper.toResponse(taskRepository.save(task));
+                    Task saved = taskRepository.save(task);
+                    appendAssignment(saved, previousAssignee, actor);
+                    return taskMapper.toResponse(saved);
                 });
     }
 
@@ -182,9 +192,12 @@ public class TaskServiceImpl implements TaskService {
                     Long assignee = request.assigneeId();
                     requireAssigneeMember(request.projectId(), assignee);
                     Set<Label> labels = resolveLabels(request.labelIds());
+                    Long previousAssignee = task.getAssigneeId();
                     taskMapper.updateDomain(task, request, author, assignee, project, labels);
 
-                    return taskMapper.toResponse(taskRepository.save(task));
+                    Task saved = taskRepository.save(task);
+                    appendAssignment(saved, previousAssignee, actor);
+                    return taskMapper.toResponse(saved);
                 });
     }
 
@@ -214,6 +227,22 @@ public class TaskServiceImpl implements TaskService {
 
                     return taskMapper.toResponse(taskRepository.saveStatus(task));
                 });
+    }
+
+    private void appendAssignment(Task task, Long previousAssignee, Actor actor) {
+        Long recipient = task.getAssigneeId();
+        if (recipient != null
+                && !Objects.equals(recipient, previousAssignee)
+                && recipient != actor.id()) {
+            assignments.append(
+                    new TaskAssignment(
+                            task.getId(),
+                            task.getVersion(),
+                            task.getTaskKey(),
+                            task.getProject().getId(),
+                            actor.id(),
+                            recipient));
+        }
     }
 
     private void requireAssigneeMember(Long projectId, Long assigneeId) {

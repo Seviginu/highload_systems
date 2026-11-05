@@ -74,9 +74,10 @@ consume() {
 }
 
 echo "Starting isolated project: $smoke_project"
-compose up -d --wait --wait-timeout 180 kafka-1 kafka-2 kafka-3 kafka-init
+compose up -d kafka-1 kafka-2 kafka-3 kafka-init
 init_exit=$(docker wait "$(compose ps -aq kafka-init)")
 [[ "$init_exit" == 0 ]]
+compose up -d --wait --wait-timeout 180 kafka-1 kafka-2 kafka-3
 # A second execution must succeed without creating duplicates or changing the topic layout.
 compose run --rm --no-deps kafka-init > "$smoke_logs/repeated-init.log" 2>&1
 wait_for_isr 3

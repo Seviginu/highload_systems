@@ -20,8 +20,8 @@ export BOOTSTRAP_ADMIN_PASSWORD="${BOOTSTRAP_ADMIN_PASSWORD:-AdminPassword123!}"
 cd "${PROJECT_DIR}"
 
 bash "${SCRIPT_DIR}/generate-jwt-keys.sh"
-docker compose up --build -d --wait --wait-timeout "${STARTUP_TIMEOUT_SECONDS:-180}"
-# --wait checks a service without healthcheck once it starts; also check the final init exit code.
+docker compose up --build -d
+# Wait for the one-shot init separately: --wait can reject its successful exit.
 init_container=$(docker compose ps -aq kafka-init)
 init_exit=$(docker wait "$init_container")
 if [[ "$init_exit" != 0 ]]; then
@@ -29,8 +29,10 @@ if [[ "$init_exit" != 0 ]]; then
     echo "Kafka topic initialization failed (exit $init_exit)" >&2
     exit 1
 fi
+docker compose up -d --wait --wait-timeout "${STARTUP_TIMEOUT_SECONDS:-180}" \
+    api-gateway pgadmin redisinsight kafka-1 kafka-2 kafka-3
 swagger_deadline=$((SECONDS + ${STARTUP_TIMEOUT_SECONDS:-180}))
-for service in user-service tracker-service; do
+for service in user-service tracker-service notification-service; do
     until curl --fail --silent --max-time 5 --output /dev/null \
             "http://localhost:${GATEWAY_PORT}/v3/api-docs/${service}"; do
         if (( SECONDS >= swagger_deadline )); then

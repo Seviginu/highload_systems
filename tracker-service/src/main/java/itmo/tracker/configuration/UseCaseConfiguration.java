@@ -50,7 +50,8 @@ public class UseCaseConfiguration {
             ProjectMemberService members,
             UserDirectoryPort users,
             UnitOfWork transactions,
-            LabelService labels) {
+            LabelService labels,
+            TaskAssignments assignments) {
         return new CachedTaskService(
                 new TaskServiceImpl(
                         access,
@@ -60,6 +61,7 @@ public class UseCaseConfiguration {
                         members,
                         users,
                         transactions,
-                        labels));
+                        labels,
+                        assignments));
     }
 }
