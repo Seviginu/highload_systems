@@ -4,7 +4,7 @@
 
 ## Границы сервисов
 
-`event-contracts` — небольшая Maven-библиотека с Java-записями `TaskAssignedEvent`, `TaskStatusChangedEvent`, `ProjectMemberAddedEvent`. В ней нет Spring, JPA, KafkaTemplate или бизнес-сервисов. Контракт содержит eventId, eventType, schemaVersion, occurredAt, aggregateId, aggregateVersion, actorId, recipientIds и краткий payload соответствующего типа (ключ задачи, статусы или ID участника/название проекта). Пароль, хэш, JWT, Authorization и текст задачи в событие не входят.
+`event-contracts` — небольшая Maven-библиотека с Java-записями `TaskAssignedEvent`, `TaskStatusChangedEvent`, `ProjectMemberAddedEvent`, `FileUploadedEvent`. В ней нет Spring, JPA, KafkaTemplate или бизнес-сервисов. Контракт содержит eventId, eventType, schemaVersion, occurredAt, aggregateId, aggregateVersion, actorId, recipientIds и краткий payload соответствующего типа (ключ задачи, статусы или ID участника/название проекта). Пароль, хэш, JWT, Authorization и текст задачи в событие не входят.
 
 Трекер зависит от портов `TaskAssignments`, `TaskStatusChanges`, `ProjectMemberships` и внутренних записей application. Преобразование в транспортный контракт, UUID/время, JSON и запись outbox находятся во внешнем адаптере. Событие создается после получения ID/версии сохраненной задачи, до commit той же транзакции.
 
@@ -59,7 +59,7 @@ PATCH /api/v1/notifications/{id}/read
 
 Успех — 204. Повторный PATCH сохраняет первое readAt. Отсутствующее или чужое уведомление — 404; без JWT — 401; неправильная пагинация/UUID — 400. Ошибки имеют общий формат timestamp/status/error/message/path/fieldErrors.
 
-Уведомление содержит id, eventId, recipientId, type (`TaskAssigned`, `TaskStatusChanged`, `ProjectMemberAdded`), message, resourceType (`Task`/`Project`), строковый resourceId, createdAt и readAt. Строковый resourceId позволяет использовать тот же API для будущих UUID файлов. JPA-модели уведомления и outbox имеют Bean Validation; ограничения БД сохраняются дополнительно. Непрочитанное уведомление имеет readAt=null. Публичного API создания уведомления нет.
+Уведомление содержит id, eventId, recipientId, type (`TaskAssigned`, `TaskStatusChanged`, `ProjectMemberAdded`, `FileUploaded`), message, resourceType (`Task`/`Project`/`File`), строковый resourceId, createdAt и readAt. Строковый resourceId позволяет использовать тот же API для будущих UUID файлов. JPA-модели уведомления и outbox имеют Bean Validation; ограничения БД сохраняются дополнительно. Непрочитанное уведомление имеет readAt=null. Публичного API создания уведомления нет.
 
 ## Проверка
 
@@ -96,6 +96,6 @@ python3 scripts/notifications-smoke.py
 
 Изолированный smoke этапа 5 — **PASS**: три типа событий, consumer restart, stop/start всех трех брокеров с сохранением pending outbox и автоматическим восстановлением доставки без рестарта приложений, DLT и следующее корректное событие. Тестовые ресурсы удалены. Проверка выявила проблему повторного использования Docker IP: [внутренние порты брокеров разделены](LAB4_KAFKA.md#уточнение-этапа-5-восстановление-после-полного-простоя). При обновлении существующего `.env` сверить KAFKA_BOOTSTRAP_SERVERS с `.env.example`.
 
-FileUploaded и file-service остаются этапом 6. Масштабирование publisher не входит в минимальный объем.
+FileUploaded и file-service реализованы в этапе 6: [файловый сервис](LAB4_FILES.md). Consumer также подписан на files.events.v1 и сохраняет подтверждение загрузившему с resourceType=File и строковым UUID. Масштабирование publisher не входит в минимальный объем.
 
 Технические источники: [Spring Kafka 3.3: обработка ошибок и retries](https://docs.spring.io/spring-kafka/reference/3.3/kafka/annotation-error-handling.html), [Kafka Testcontainers](https://java.testcontainers.org/modules/kafka/).

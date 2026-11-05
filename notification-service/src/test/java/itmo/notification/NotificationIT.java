@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import itmo.events.file.FileUploadedEvent;
 import itmo.events.project.ProjectMemberAddedEvent;
 import itmo.events.task.TaskAssignedEvent;
 import itmo.events.task.TaskStatusChangedEvent;
@@ -94,6 +95,19 @@ class NotificationIT {
         }
 
         @Bean
+        NewTopic fileEvents() {
+            return TopicBuilder.name(FileUploadedEvent.TOPIC).partitions(3).replicas(1).build();
+        }
+
+        @Bean
+        NewTopic fileDlt() {
+            return TopicBuilder.name(FileUploadedEvent.TOPIC + ".dlt")
+                    .partitions(3)
+                    .replicas(1)
+                    .build();
+        }
+
+        @Bean
         NewTopic taskEvents() {
             return TopicBuilder.name(TaskAssignedEvent.TOPIC).partitions(3).replicas(1).build();
         }
@@ -103,7 +117,10 @@ class NotificationIT {
     @Autowired JdbcTemplate jdbc;
     @Autowired NotificationService service;
     @Autowired ObjectMapper mapper;
-    @MockitoSpyBean(name = "kafkaTemplate") KafkaTemplate<?, ?> kafkaSpy;
+
+    @MockitoSpyBean(name = "kafkaTemplate")
+    KafkaTemplate<?, ?> kafkaSpy;
+
     @Autowired KafkaTemplate<String, String> kafka;
 
     @BeforeEach
@@ -346,7 +363,8 @@ class NotificationIT {
                     admin.listOffsets(
                                     java.util.stream.Stream.of(
                                                     TaskAssignedEvent.TOPIC,
-                                                    ProjectMemberAddedEvent.TOPIC)
+                                                    ProjectMemberAddedEvent.TOPIC,
+                                                    FileUploadedEvent.TOPIC)
                                             .flatMap(
                                                     t ->
                                                             java.util.stream.IntStream.range(0, 3)
@@ -460,5 +478,46 @@ class NotificationIT {
         }
         awaitOffsets();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM notifications", Long.class)).isZero();
+    }
+
+    @Test
+    void shouldConsumeFileUuidAndDeduplicateConfirmationToUploader() throws Exception {
+        var file = UUID.randomUUID();
+        var event =
+                new FileUploadedEvent(
+                        UUID.randomUUID(),
+                        FileUploadedEvent.TYPE,
+                        1,
+                        Instant.now(),
+                        file,
+                        null,
+                        2L,
+                        List.of(2L),
+                        new FileUploadedEvent.Payload(100));
+        for (int i = 0; i < 2; i++)
+            kafka.send(FileUploadedEvent.TOPIC, file.toString(), mapper.writeValueAsString(event))
+                    .get(10, TimeUnit.SECONDS);
+        await().atMost(Duration.ofSeconds(20))
+                .untilAsserted(
+                        () ->
+                                assertThat(
+                                                jdbc.queryForObject(
+                                                        "SELECT count(*) FROM processed_events",
+                                                        Long.class))
+                                        .isEqualTo(1));
+        awaitOffsets();
+        assertThat(jdbc.queryForObject("SELECT resource_id FROM notifications", String.class))
+                .isEqualTo(file.toString());
+        as(2, "DEVELOPER")
+                .get()
+                .uri("/api/v1/notifications")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$[0].type")
+                .isEqualTo("FileUploaded")
+                .jsonPath("$[0].resourceType")
+                .isEqualTo("File");
     }
 }

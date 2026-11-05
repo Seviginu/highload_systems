@@ -3,6 +3,7 @@ package itmo.notification.adapter.in.kafka;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import itmo.events.file.FileUploadedEvent;
 import itmo.events.project.ProjectMemberAddedEvent;
 import itmo.events.task.TaskAssignedEvent;
 import itmo.events.task.TaskStatusChangedEvent;
@@ -23,7 +24,11 @@ public class TrackerEventListener {
     }
 
     @KafkaListener(
-            topics = {TaskAssignedEvent.TOPIC, ProjectMemberAddedEvent.TOPIC},
+            topics = {
+                TaskAssignedEvent.TOPIC,
+                ProjectMemberAddedEvent.TOPIC,
+                FileUploadedEvent.TOPIC
+            },
             groupId = "${app.notifications.group-id:notifications-task-assigned-v1}",
             autoStartup = "${app.notifications.listener-enabled:true}")
     public void receive(ConsumerRecord<String, String> message) {
@@ -63,6 +68,13 @@ public class TrackerEventListener {
                                     e.aggregateId(),
                                     e.payload().projectName(),
                                     e.recipientIds()));
+                }
+                case FileUploadedEvent.TYPE -> {
+                    requireTopic(message, FileUploadedEvent.TOPIC);
+                    var e = mapper.treeToValue(json, FileUploadedEvent.class);
+                    notifications.receive(
+                            new FileUploadedReceived(
+                                    e.eventId(), e.aggregateId(), e.recipientIds()));
                 }
                 default -> throw new IllegalArgumentException("Unsupported event type");
             }

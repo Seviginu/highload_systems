@@ -53,7 +53,7 @@ public class NotificationService {
                 event.eventId(),
                 "TaskAssigned",
                 "Task",
-                event.taskId(),
+                Long.toString(event.taskId()),
                 "Task '" + event.taskKey() + "' has been assigned to you",
                 event.recipients());
     }
@@ -63,7 +63,7 @@ public class NotificationService {
                 event.eventId(),
                 "TaskStatusChanged",
                 "Task",
-                event.taskId(),
+                Long.toString(event.taskId()),
                 "Task '"
                         + event.taskKey()
                         + "' changed from "
@@ -78,8 +78,18 @@ public class NotificationService {
                 event.eventId(),
                 "ProjectMemberAdded",
                 "Project",
-                event.projectId(),
+                Long.toString(event.projectId()),
                 "You have been added to project '" + event.projectName() + "'",
+                event.recipients());
+    }
+
+    public void receive(FileUploadedReceived event) {
+        store(
+                event.eventId(),
+                "FileUploaded",
+                "File",
+                event.fileId().toString(),
+                "File uploaded successfully",
                 event.recipients());
     }
 
@@ -87,7 +97,7 @@ public class NotificationService {
             UUID eventId,
             String type,
             String resourceType,
-            long resourceId,
+            String resourceId,
             String message,
             java.util.List<Long> recipients) {
         var now = clock.instant();
@@ -103,7 +113,7 @@ public class NotificationService {
                                                 type,
                                                 message,
                                                 resourceType,
-                                                Long.toString(resourceId),
+                                                resourceId,
                                                 now,
                                                 null))
                         .toList();

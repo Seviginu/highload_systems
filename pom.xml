@@ -37,6 +37,7 @@
         <module>tracker-service</module>
         <module>api-gateway</module>
         <module>notification-service</module>
+        <module>file-service</module>
     </modules>
 
     <dependencyManagement>

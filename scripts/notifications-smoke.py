@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Build and test the notification flow in an isolated, automatically removed Compose project."""
+"""Build and test the notification and file flows in an isolated, automatically removed Compose project."""
 import json
 import os
 from pathlib import Path
 import subprocess
 import tempfile
 import time
+import uuid
 import urllib.error
 import urllib.request
 
@@ -16,6 +17,7 @@ ENV = dict(os.environ, BOOTSTRAP_ADMIN_ENABLED="true", BOOTSTRAP_ADMIN_EMAIL="ad
            BOOTSTRAP_ADMIN_PASSWORD="Smoke-password-123!", POSTGRES_DB="tracker", POSTGRES_USER="tracker",
            POSTGRES_PASSWORD="tracker", USER_DB_USERNAME="users", USER_DB_PASSWORD="users",
            NOTIFICATION_DB_USERNAME="notifications", NOTIFICATION_DB_PASSWORD="notifications",
+           FILE_DB_USERNAME="files", FILE_DB_PASSWORD="files", FILE_MAX_BYTES="10485760",
            JWT_ISSUER="http://task-tracker", JWT_AUDIENCE="task-tracker-api",
            KAFKA_BOOTSTRAP_SERVERS="kafka-1:9092,kafka-2:9094,kafka-3:9096")
 
@@ -52,7 +54,7 @@ try:
         for service, port in [("app", None), ("user-service", None), ("config-server", None),
                               ("discovery-server", None), ("postgres", None), ("redis", None), ("api-gateway", 8080)]:
             text += f"  {service}:\n    ports: " + ("!reset []\n" if port is None else f"!override ['127.0.0.1::{port}']\n")
-        for service in ["app", "api-gateway", "user-service", "notification-service"]:
+        for service in ["app", "api-gateway", "user-service", "notification-service", "file-service"]:
             # Merge repeated service keys by appending volumes to the existing section where necessary.
             target = f"  {service}:\n"
             volumes = f"    volumes:\n      - {keys}/public.pem:/app/keys/public.pem:ro\n"
@@ -89,9 +91,9 @@ try:
                     assert response.code == expected, f"{method} {path}: {response.code}, expected {expected}"
                     return (json.loads(payload) if payload else None), response.headers
 
-            for service in ["user-service", "tracker-service", "notification-service"]:
+            for service in ["user-service", "tracker-service", "notification-service", "file-service"]:
                 until(lambda: api("GET", f"/v3/api-docs/{service}")[0].get("openapi"))
-            print("All three OpenAPI routes are available through Gateway", flush=True)
+            print("All four OpenAPI routes are available through Gateway", flush=True)
 
             def login(email):
                 return api("POST", "/api/v1/auth/login", body={"email": email, "password": "Smoke-password-123!"})[0]["accessToken"]
@@ -174,7 +176,58 @@ try:
             create_task("NOTICE-4", other_id)
             until(lambda: count(other) == 3)
             print("Unsupported event reaches replicated DLT; valid events continue: PASS", flush=True)
-            print("PASS: three event types, JWT, ownership/read, consumer restart, Kafka outage and DLT", flush=True)
+            def raw_api(method, path, token, data=None, content_type=None, expected=200):
+                headers = {"Authorization": "Bearer " + token}
+                if content_type:
+                    headers["Content-Type"] = content_type
+                req = urllib.request.Request(base + path, method=method, headers=headers, data=data)
+                try:
+                    response = urllib.request.urlopen(req, timeout=30)
+                except urllib.error.HTTPError as error:
+                    response = error
+                with response:
+                    payload = response.read()
+                    assert response.code == expected, f"{method} {path}: {response.code}, expected {expected}"
+                    return payload, response.headers
+
+            def upload(token, payload, expected=201, chunked=False):
+                boundary = "lab4-" + uuid.uuid4().hex
+                prefix = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="proof.bin"\r\n'
+                          'Content-Type: application/octet-stream\r\n\r\n').encode()
+                body = prefix + payload + f"\r\n--{boundary}--\r\n".encode()
+                data = (body[i:i + 65536] for i in range(0, len(body), 65536)) if chunked else body
+                result, headers = raw_api("POST", "/api/v1/files", token, data,
+                                          "multipart/form-data; boundary=" + boundary, expected)
+                return json.loads(result), headers
+
+            # The largest permitted file exercises multipart spilling, bytea, and Gateway limits.
+            content = bytes(range(256)) * 40960
+            file, headers = upload(developer, content, chunked=True)
+            file_path = "/api/v1/files/" + file["id"]
+            assert file["ownerId"] == developer_id and file["size"] == len(content)
+            assert headers["Location"] == file_path
+            assert api("GET", file_path, developer)[0]["name"] == "proof.bin"
+            for token in [developer, admin]:
+                downloaded, headers = raw_api("GET", file_path + "/content", token)
+                assert downloaded == content and "attachment" in headers["Content-Disposition"]
+                assert headers["Content-Type"] == "application/octet-stream"
+            api("GET", file_path, other, expected=403)
+            api("GET", file_path + "/content", other, expected=403)
+            api("GET", file_path, expected=401)
+            upload(developer, b"", expected=400)
+            upload(developer, content + b"x", expected=413)
+            upload(developer, content + b"x", expected=413, chunked=True)
+            # Exceed the complete request limit as well, independent of Content-Length.
+            upload(developer, content + bytes(70000), expected=413, chunked=True)
+            until(lambda: len(notices(developer, "FileUploaded")) == 1)
+            assert notices(developer, "FileUploaded")[0]["resourceId"] == file["id"]
+            print("10 MiB chunked upload, exact download, access, file/request limits and FileUploaded: PASS", flush=True)
+
+            command(compose + ["up", "-d", "--no-deps", "--force-recreate", "--wait", "--wait-timeout", "120", "files-db"], timeout=150)
+            command(compose + ["up", "-d", "--no-deps", "--force-recreate", "--wait", "--wait-timeout", "120", "file-service"], timeout=150)
+            until(lambda: raw_api("GET", file_path + "/content", developer)[0] == content)
+            print("File bytes survive database and service container recreation on retained volume: PASS", flush=True)
+            print("PASS: four event types, JWT, four OpenAPI routes, file upload/download/persistence, Kafka recovery and DLT", flush=True)
         finally:
             try:
                 command(compose + ["logs", "--no-color"], timeout=60)
