@@ -66,7 +66,8 @@ class ProjectServiceImplTest {
         assertThat(response.name()).isEqualTo("Platform");
         assertThat(response.code()).isEqualTo("PLATFORM");
         verify(projectRepository).save(any(Project.class));
-        verify(projectMemberService).assignValidatedTeamLead(null, 1L);
+        verify(projectMemberService)
+                .assignValidatedTeamLead(null, 1L, itmo.support.TestActors.admin());
     }
 
     @Test

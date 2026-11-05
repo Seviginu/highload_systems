@@ -56,7 +56,7 @@ public class ProjectServiceImpl implements ProjectService {
 
                     Project project = projectRepository.save(projectMapper.toDomain(request));
                     projectMemberService.assignValidatedTeamLead(
-                            project.getId(), request.teamLeadId());
+                            project.getId(), request.teamLeadId(), actor);
                     return projectMapper.toResponse(project);
                 });
     }

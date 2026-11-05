@@ -343,6 +343,59 @@ class PermissionsIT {
         }
     }
 
+    @Test
+    void shouldEmitStatusOnlyForRealChangesByAnotherUser() throws Exception {
+        TaskResponse task = as(lead).post().uri("/api/v1/tasks").bodyValue(taskBody()).exchange().expectStatus().isCreated()
+                .expectBody(TaskResponse.class).returnResult().getResponseBody();
+        TaskResponse changed = as(developer).patch().uri("/api/v1/tasks/{id}/status", task.id())
+                .bodyValue(Map.of("status", "IN_PROGRESS", "version", task.version())).exchange().expectStatus().isOk()
+                .expectBody(TaskResponse.class).returnResult().getResponseBody();
+        as(developer).patch().uri("/api/v1/tasks/{id}/status", task.id())
+                .bodyValue(Map.of("status", "IN_PROGRESS", "version", changed.version())).exchange().expectStatus().isOk();
+        var json = new com.fasterxml.jackson.databind.ObjectMapper().readTree(jdbc.queryForObject(
+                "SELECT payload FROM outbox_events WHERE payload::jsonb->>'eventType'='TaskStatusChanged'", String.class));
+        assertThat(json.path("recipientIds").get(0).asLong()).isEqualTo(lead.getId());
+        assertThat(json.path("actorId").asLong()).isEqualTo(developer.getId());
+        assertThat(json.path("payload").path("previousStatus").asText()).isEqualTo("TODO");
+        assertThat(json.path("aggregateVersion").asLong()).isEqualTo(changed.version());
+        var body=taskBody(); body.put("status","DONE"); body.put("version",changed.version());
+        as(lead).put().uri("/api/v1/tasks/{id}",task.id()).bodyValue(body).exchange().expectStatus().isOk();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE payload::jsonb->>'eventType'='TaskStatusChanged'",Long.class)).isEqualTo(1L);
+    }
+
+    @Test
+    void shouldRecordMembershipAdditionAndReactivationButNotDuplicate() {
+        String uri="/api/v1/projects/"+project.getId()+"/members";
+        as(lead).post().uri(uri).bodyValue(Map.of("userId",outsider.getId())).exchange().expectStatus().isCreated();
+        as(lead).post().uri(uri).bodyValue(Map.of("userId",outsider.getId())).exchange().expectStatus().isEqualTo(409);
+        long member=members.findByProjectIdAndUserId(project.getId(),outsider.getId()).orElseThrow().getId();
+        as(lead).delete().uri(uri+"/"+member).exchange().expectStatus().isNoContent();
+        as(lead).post().uri(uri).bodyValue(Map.of("userId",outsider.getId())).exchange().expectStatus().isCreated();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE topic='tracker.project.events.v1'",Long.class)).isEqualTo(2L);
+    }
+
+    @Test
+    void shouldRollbackMembershipWhenOutboxFails() {
+        jdbc.execute("ALTER TABLE outbox_events ADD CONSTRAINT test_outbox_failure CHECK(false)");
+        try {
+            as(lead).post().uri("/api/v1/projects/{id}/members",project.getId()).bodyValue(Map.of("userId",outsider.getId())).exchange().expectStatus().is5xxServerError();
+            assertThat(members.findByProjectIdAndUserId(project.getId(),outsider.getId())).isEmpty();
+        } finally { jdbc.execute("ALTER TABLE outbox_events DROP CONSTRAINT test_outbox_failure"); }
+    }
+
+    @Autowired private itmo.tracker.adapter.out.kafka.OutboxMaintenance maintenance;
+
+    @Test
+    void shouldRetainPendingEventsAndOnlyCleanOldPublishedRows() {
+        for (int n=0;n<3;n++) {
+            jdbc.update("INSERT INTO outbox_events(event_id,topic,aggregate_key,payload,created_at,next_attempt_at,published_at) VALUES (?,'topic','1','{}',now()-interval '10 days',now(),?)",
+                    java.util.UUID.randomUUID(), n==0 ? java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(864000)) : n==1 ? null : java.sql.Timestamp.from(java.time.Instant.now()));
+        }
+        assertThat(maintenance.cleanupPublished()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events",Long.class)).isEqualTo(2L);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE published_at IS NULL",Long.class)).isEqualTo(1L);
+    }
+
     private TaskResponse task() {
         return admin().post().uri("/api/v1/tasks").bodyValue(taskBody()).exchange().expectStatus().isCreated()
                 .expectBody(TaskResponse.class).returnResult().getResponseBody();

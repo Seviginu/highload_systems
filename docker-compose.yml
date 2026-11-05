@@ -3,7 +3,7 @@ x-kafka: &kafka
   environment: &kafka-environment
     CLUSTER_ID: ${KAFKA_CLUSTER_ID:-MkU3OEVBNTcwNTJENDM2Qk}
     KAFKA_PROCESS_ROLES: broker,controller
-    KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093
+    KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9093,2@kafka-2:9095,3@kafka-3:9097
     KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
     KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
     KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
@@ -24,13 +24,15 @@ x-kafka: &kafka
     - source: kafka-client
       target: /etc/kafka/client.properties
   healthcheck:
-    test: ["CMD-SHELL", "KAFKA_HEAP_OPTS='-Xms32m -Xmx128m' /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --command-config /etc/kafka/client.properties --list >/dev/null 2>&1"]
+    test: ["CMD-SHELL", "KAFKA_HEAP_OPTS='-Xms32m -Xmx128m' /opt/kafka/bin/kafka-topics.sh --bootstrap-server $${KAFKA_ADVERTISED_LISTENERS#*://} --command-config /etc/kafka/client.properties --list >/dev/null 2>&1"]
     interval: 15s
     timeout: 12s
     retries: 12
     start_period: 20s
   restart: unless-stopped
 
+# Distinct ports prevent a client from accepting the wrong broker after Docker reuses its old IP.
+# See https://issues.apache.org/jira/browse/KAFKA-15828
 services:
   kafka-1:
     <<: *kafka
@@ -46,7 +48,8 @@ services:
     environment:
       <<: *kafka-environment
       KAFKA_NODE_ID: 2
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:9092
+      KAFKA_LISTENERS: PLAINTEXT://:9094,CONTROLLER://:9095
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:9094
     volumes:
       - kafka-2-data:/var/lib/kafka/data
 
@@ -55,7 +58,8 @@ services:
     environment:
       <<: *kafka-environment
       KAFKA_NODE_ID: 3
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:9092
+      KAFKA_LISTENERS: PLAINTEXT://:9096,CONTROLLER://:9097
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:9096
     volumes:
       - kafka-3-data:/var/lib/kafka/data
 
@@ -63,7 +67,7 @@ services:
     image: apache/kafka:3.9.2
     entrypoint: ["/bin/bash", "/etc/kafka/init-topics.sh"]
     environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9094,kafka-3:9096
       KAFKA_HEAP_OPTS: -Xms32m -Xmx128m
     configs:
       - source: kafka-client
@@ -122,7 +126,7 @@ services:
     environment:
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka-1:9092,kafka-2:9092,kafka-3:9092}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka-1:9092,kafka-2:9094,kafka-3:9096}
       USER_R2DBC_URL: r2dbc:postgresql://users-db:5432/users
       USER_JDBC_URL: jdbc:postgresql://users-db:5432/users
       USER_DB_USERNAME: ${USER_DB_USERNAME:-users}
@@ -182,7 +186,7 @@ services:
       NOTIFICATION_DB_URL: jdbc:postgresql://notifications-db:5432/notifications
       NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:-notifications}
       NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-notifications}
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka-1:9092,kafka-2:9092,kafka-3:9092}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka-1:9092,kafka-2:9094,kafka-3:9096}
       JWT_ISSUER: ${JWT_ISSUER:-http://task-tracker}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-task-tracker-api}
       SERVER_PORT: 8080
@@ -336,7 +340,7 @@ services:
       EUREKA_URL: http://discovery-server:8761/eureka/
       JWT_ISSUER: ${JWT_ISSUER:-http://task-tracker}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-task-tracker-api}
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka-1:9092,kafka-2:9092,kafka-3:9092}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka-1:9092,kafka-2:9094,kafka-3:9096}
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-vs_lab1}
       DB_USERNAME: ${POSTGRES_USER:-vs_lab1}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-vs_lab1}

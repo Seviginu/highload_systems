@@ -49,28 +49,67 @@ public class NotificationService {
     }
 
     public void receive(AssignmentReceived event) {
+        store(
+                event.eventId(),
+                "TaskAssigned",
+                "Task",
+                event.taskId(),
+                "Task '" + event.taskKey() + "' has been assigned to you",
+                event.recipients());
+    }
+
+    public void receive(StatusChangedReceived event) {
+        store(
+                event.eventId(),
+                "TaskStatusChanged",
+                "Task",
+                event.taskId(),
+                "Task '"
+                        + event.taskKey()
+                        + "' changed from "
+                        + event.previousStatus()
+                        + " to "
+                        + event.status(),
+                event.recipients());
+    }
+
+    public void receive(ProjectMemberReceived event) {
+        store(
+                event.eventId(),
+                "ProjectMemberAdded",
+                "Project",
+                event.projectId(),
+                "You have been added to project '" + event.projectName() + "'",
+                event.recipients());
+    }
+
+    private void store(
+            UUID eventId,
+            String type,
+            String resourceType,
+            long resourceId,
+            String message,
+            java.util.List<Long> recipients) {
         var now = clock.instant();
         var created =
-                event.recipients().stream()
+                recipients.stream()
                         .distinct()
                         .map(
                                 recipient ->
                                         new Notification(
                                                 ids.get(),
-                                                event.eventId(),
+                                                eventId,
                                                 recipient,
-                                                "TaskAssigned",
-                                                "Task '"
-                                                        + event.taskKey()
-                                                        + "' has been assigned to you",
-                                                "Task",
-                                                Long.toString(event.taskId()),
+                                                type,
+                                                message,
+                                                resourceType,
+                                                Long.toString(resourceId),
                                                 now,
                                                 null))
                         .toList();
         transactions.write(
                 () -> {
-                    inbox.save(event.eventId(), created);
+                    inbox.save(eventId, created);
                     return null;
                 });
     }

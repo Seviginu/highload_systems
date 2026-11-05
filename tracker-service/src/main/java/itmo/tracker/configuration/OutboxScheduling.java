@@ -1,5 +1,6 @@
 package itmo.tracker.configuration;
 
+import itmo.tracker.adapter.out.kafka.OutboxMaintenance;
 import itmo.tracker.adapter.out.kafka.OutboxPublisher;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -12,12 +13,20 @@ import org.springframework.scheduling.annotation.*;
 public class OutboxScheduling {
     private final OutboxPublisher publisher;
 
-    public OutboxScheduling(OutboxPublisher publisher) {
+    private final OutboxMaintenance maintenance;
+
+    public OutboxScheduling(OutboxPublisher publisher, OutboxMaintenance maintenance) {
+        this.maintenance = maintenance;
         this.publisher = publisher;
     }
 
     @Scheduled(fixedDelayString = "${app.outbox.poll-interval:1000}")
     public void publish() {
         publisher.publishBatch();
+    }
+
+    @Scheduled(fixedDelayString = "${app.outbox.cleanup-interval:3600000}")
+    public void cleanup() {
+        maintenance.cleanupPublished();
     }
 }

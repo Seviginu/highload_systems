@@ -55,7 +55,9 @@ class ProjectMemberServiceImplTest {
                         projectRepository,
                         userDirectory,
                         new TestTransactions(),
-                        new ProjectMemberMapper());
+                        new ProjectMemberMapper(),
+                        org.mockito.Mockito.mock(
+                                itmo.tracker.application.port.out.ProjectMemberships.class));
         project = new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE);
         user = new TestUser("DEVELOPER");
         ReflectionTestUtils.setField(project, "id", 1L);
@@ -67,7 +69,12 @@ class ProjectMemberServiceImplTest {
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
         when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.empty());
         when(memberRepository.save(any(ProjectMember.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+                .thenAnswer(
+                        invocation -> {
+                            ProjectMember saved = invocation.getArgument(0);
+                            ReflectionTestUtils.setField(saved, "id", 3L);
+                            return saved;
+                        });
 
         var response =
                 memberService.add(
@@ -94,6 +101,7 @@ class ProjectMemberServiceImplTest {
     @Test
     void shouldReactivateInactiveMember() {
         ProjectMember existing = new ProjectMember(project, user.getId());
+        ReflectionTestUtils.setField(existing, "id", 3L);
         existing.deactivate();
         when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
         when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.of(existing));

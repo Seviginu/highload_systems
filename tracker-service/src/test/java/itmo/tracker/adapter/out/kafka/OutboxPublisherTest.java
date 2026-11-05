@@ -61,6 +61,21 @@ class OutboxPublisherTest {
     }
 
     @Test
+    void shouldRepublishSameEventAfterAcknowledgementButFailedDatabaseUpdate() {
+        var event = event(1, now);
+        when(outbox.pending(any())).thenReturn(List.of(event));
+        when(kafka.send("topic", "1", "{}")).thenReturn(CompletableFuture.completedFuture(null));
+        when(outbox.published(1, now))
+                .thenThrow(new IllegalStateException("Database unavailable"))
+                .thenReturn(1);
+        publisher.publishBatch();
+        publisher.publishBatch();
+        verify(kafka, times(2)).send("topic", "1", "{}");
+        verify(outbox).failed(1, now.plusSeconds(5), "IllegalStateException");
+        verify(outbox, times(2)).published(1, now);
+    }
+
+    @Test
     void shouldRejectUnboundedBatches() {
         assertThatThrownBy(() -> new OutboxPublisher(outbox, kafka, Clock.systemUTC(), 101))
                 .isInstanceOf(IllegalArgumentException.class);

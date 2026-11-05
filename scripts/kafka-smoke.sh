@@ -95,8 +95,13 @@ leader=$(cli kafka-topics.sh --bootstrap-server "$bootstrap" \
     awk -v partition="$partition" '/Partition:/ { for(i=1;i<=NF;i++) { if($i=="Partition:") p=$(i+1); if($i=="Leader:") l=$(i+1) } if(p==partition) print l }')
 [[ "$leader" =~ ^[1-3]$ ]]
 # Run the CLI in a surviving broker, then stop the actual leader of the written partition.
-if [[ "$leader" == 1 ]]; then client_broker=kafka-2; else client_broker=kafka-1; fi
-bootstrap="$client_broker:9092"
+if [[ "$leader" == 1 ]]; then
+    client_broker=kafka-2
+    bootstrap=kafka-2:9094
+else
+    client_broker=kafka-1
+    bootstrap=kafka-1:9092
+fi
 echo "Stopping leader kafka-$leader of task partition $partition"
 compose stop -t 10 "kafka-$leader"
 wait_for_isr 2
