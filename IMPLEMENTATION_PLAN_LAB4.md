@@ -1,14 +1,14 @@
 # План выполнения ЛР4
 
-Статус: этап 1 влит в `main`; этап 2 выполнен и проверен в ветке `feature/lab4-tracker-clean-architecture`. План составлен и актуализируется с 06.11.2026.
+Статус: этапы 1–2 влиты в `main`; этап 3 выполнен и проверен в ветке `feature/lab4-kafka-cluster`. План составлен и актуализируется с 06.11.2026.
 
 ## Текущее выполнение
 
 | Этап | Статус |
 |---|---|
 | 1. Clean Architecture user-service | Выполнен, проверен, влит в main |
-| 2. Clean Architecture tracker-service | Выполнен и проверен, отдельная feature-ветка |
-| 3. Kafka в Compose | Не начат |
+| 2. Clean Architecture tracker-service | Выполнен, проверен, влит в main |
+| 3. Kafka в Compose | Выполнен и проверен, отдельная feature-ветка |
 | 4. Первый сквозной сценарий уведомлений | Не начат |
 | 5. Остальные события и надежность | Не начат |
 | 6. file-service | Не начат |
@@ -50,7 +50,7 @@
 
 ### Этап 2 — реализация и решения
 
-- Ветка `feature/lab4-tracker-clean-architecture` создана от `main` после слияния этапа 1. Этапы 3–8 не начинались.
+- Ветка `feature/lab4-tracker-clean-architecture` создана от `main` после слияния этапа 1. На момент завершения этапа 2 этапы 3–8 не начинались.
 - `tracker-service` разделен на `itmo.tracker.domain`, `application`, `adapter`, `configuration`. Доменные `Task`, `Project`, `ProjectMember`, `Label` не содержат Spring/JPA/Bean Validation/Lombok; отдельные `*Entity` сохраняют JPA-связи, Entity-валидацию и прежние таблицы. JPQL-имена сущностей сохранены явно через `@Entity(name = ...)`, миграции не менялись.
 - Сценарии и бизнес-проверки `TrackerAccess` используют только внутренние модели и порты. Контроллеры преобразуют REST DTO в команды и результаты обратно в DTO. `PageQuery`, `ResultPage`, `ResultSlice` заменяют Spring Data типы внутри application; SQL-пагинация и максимальный размер 50 сохранены.
 - `UnitOfWork` задает границы транзакций; `SpringUnitOfWork` реализует их через TransactionTemplate. Внешняя проверка пользователей/тимлида остается до локальной записи. Создание проекта с участником и перенос задачи остаются атомарными; вложенные вызовы присоединяются к текущей транзакции.
@@ -72,7 +72,26 @@
 
 Граница проверки: полный Compose-стенд на этом этапе отдельно не запускался; межсервисные HTTP-тесты используют настоящий Feign с тестовым downstream. Общий Compose smoke остается в этапах 7–8. Рабочие контейнеры и данные не изменялись.
 
-Этап 2 оставлен в отдельной feature-ветке. Следующий этап — 3, Kafka-кластер; он не начат.
+Этап 2: коммит `6b30e60`, влит в `main` merge-коммитом `50adb48` по указанию пользователя. Этап 3 выполняется в новой ветке.
+
+### Этап 3 — реализация и решения
+
+- Ветка `feature/lab4-kafka-cluster` создана от `main` после слияния этапа 2.
+- В основной `docker-compose.yml` добавлены три брокера `apache/kafka:3.9.2` в combined KRaft, отдельные node IDs и volumes, quorum из трех контроллеров. Порты Kafka не публикуются на хост. Использованный официальный образ проверен на arm64.
+- Создаются три основных топика и три `.dlt`, каждый с 3 partitions, RF=3 и min ISR=2. Отключены auto-create и unclean leader election; внутренние offset/transaction-топики настроены с RF=3.
+- `kafka-init` — отдельный одноразовый сервис с проверкой конфигурации существующих топиков. Общий запуск дополнен проверкой его финального exit code: Docker Compose `--wait` может завершиться, пока init еще работает.
+- Config Server содержит общие bootstrap/producer/consumer/listener-настройки. Producer: acks=all и idempotence; consumer: отключен auto commit. `.env.example` дополнен cluster ID, heap и bootstrap servers; последние передаются в окружение бизнес-клиентов. Spring Kafka и бизнес-обработчики еще не добавляются — это этап 4.
+- `scripts/kafka-smoke.sh` создает собственный временный Compose-проект и проверяет топики, повторный init, ISR, остановку фактического лидера партиции, запись/чтение на двух брокерах, возврат ISR=3 и чтение трех сообщений после пересоздания всех брокеров на прежних volumes. Временные ресурсы автоматически удаляются.
+- [Документация и результаты Docker-проверки](docs/LAB4_KAFKA.md). Docker smoke прошел 06.11.2026; общий `mvn clean verify` — BUILD SUCCESS.
+
+Проверки этапа 3, 06.11.2026:
+
+- `docker compose --env-file /dev/null config --quiet`, `bash -n` для всех трех затронутых shell-скриптов, `git diff --check` — без ошибок.
+- Изолированный `scripts/kafka-smoke.sh` — PASS: 6 топиков, RF=3/ISR=3; после остановки kafka-1 (лидера task partition 1) ISR=2, producer acks=all и grouped consume работают; после возврата ISR=3; после пересоздания всех брокеров прочитаны все 3 сообщения в исходном порядке. Внутренний __consumer_offsets также имеет RF=3.
+- Итоговый `mvn clean verify` на JDK 21.0.10 — BUILD SUCCESS во всех модулях, **219 тестов, 0 failures/errors/skipped**. Gates покрытия ≥70% пройдены; покрытие остается: security-common 94,87%, user-service 96,69%, tracker-service 95,11%, api-gateway 90,48%.
+- Тестовые Kafka-контейнеры, сеть и volumes удалены. Проверка Docker после очистки подтвердила отсутствие временного Kafka-проекта; существующие контейнеры не менялись.
+
+Этапы 4–8 не начаты. Рабочие контейнеры и volumes не менялись. Полный Compose-стенд бизнес-сервисов на этом этапе отдельно не запускался. Этап 3 оставлен в отдельной feature-ветке; следующий — сервис уведомлений и первый сквозной сценарий.
 
 ## 1. Исходное состояние
 
@@ -116,7 +135,7 @@
 - Для основных топиков: 3 partitions, replication factor 3, `min.insync.replicas=2`.
 - Producer: `acks=all`, idempotence; bootstrap servers содержат все три брокера.
 - Настроить replication factor внутренних offset/transaction-топиков, если последние используются; не оставлять внутренние топики с единственной репликой.
-- Подобрать и закрепить стабильный Docker image tag при реализации. Spring Kafka брать из dependency management текущего Spring Boot; без отдельного обновления Boot/Cloud.
+- Выполнено в этапе 3: закреплен официальный образ `apache/kafka:3.9.2`. В этапе 4 Spring Kafka брать из dependency management текущего Spring Boot; без отдельного обновления Boot/Cloud.
 - Kafka доступна сервисам внутри Compose. Для обычного запуска не требуется открывать брокеры во внешнюю сеть.
 
 | Топик | Producer | События | Consumer и результат |

@@ -21,6 +21,14 @@ cd "${PROJECT_DIR}"
 
 bash "${SCRIPT_DIR}/generate-jwt-keys.sh"
 docker compose up --build -d --wait --wait-timeout "${STARTUP_TIMEOUT_SECONDS:-180}"
+# --wait checks a service without healthcheck once it starts; also check the final init exit code.
+init_container=$(docker compose ps -aq kafka-init)
+init_exit=$(docker wait "$init_container")
+if [[ "$init_exit" != 0 ]]; then
+    docker compose logs kafka-init
+    echo "Kafka topic initialization failed (exit $init_exit)" >&2
+    exit 1
+fi
 swagger_deadline=$((SECONDS + ${STARTUP_TIMEOUT_SECONDS:-180}))
 for service in user-service tracker-service; do
     until curl --fail --silent --max-time 5 --output /dev/null \

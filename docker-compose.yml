@@ -1,4 +1,84 @@
+x-kafka: &kafka
+  image: apache/kafka:3.9.2
+  environment: &kafka-environment
+    CLUSTER_ID: ${KAFKA_CLUSTER_ID:-MkU3OEVBNTcwNTJENDM2Qk}
+    KAFKA_PROCESS_ROLES: broker,controller
+    KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093
+    KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+    KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+    KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+    KAFKA_LOG_DIRS: /var/lib/kafka/data
+    KAFKA_NUM_PARTITIONS: 3
+    KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+    KAFKA_MIN_INSYNC_REPLICAS: 2
+    KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: "false"
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+    KAFKA_OFFSETS_TOPIC_NUM_PARTITIONS: 3
+    KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+    KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+    KAFKA_TRANSACTION_STATE_LOG_NUM_PARTITIONS: 3
+    KAFKA_HEAP_OPTS: ${KAFKA_HEAP_OPTS:--Xms256m -Xmx512m}
+  configs:
+    - source: kafka-client
+      target: /etc/kafka/client.properties
+  healthcheck:
+    test: ["CMD-SHELL", "KAFKA_HEAP_OPTS='-Xms32m -Xmx128m' /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --command-config /etc/kafka/client.properties --list >/dev/null 2>&1"]
+    interval: 15s
+    timeout: 12s
+    retries: 12
+    start_period: 20s
+  restart: unless-stopped
+
 services:
+  kafka-1:
+    <<: *kafka
+    environment:
+      <<: *kafka-environment
+      KAFKA_NODE_ID: 1
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:9092
+    volumes:
+      - kafka-1-data:/var/lib/kafka/data
+
+  kafka-2:
+    <<: *kafka
+    environment:
+      <<: *kafka-environment
+      KAFKA_NODE_ID: 2
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:9092
+    volumes:
+      - kafka-2-data:/var/lib/kafka/data
+
+  kafka-3:
+    <<: *kafka
+    environment:
+      <<: *kafka-environment
+      KAFKA_NODE_ID: 3
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:9092
+    volumes:
+      - kafka-3-data:/var/lib/kafka/data
+
+  kafka-init:
+    image: apache/kafka:3.9.2
+    entrypoint: ["/bin/bash", "/etc/kafka/init-topics.sh"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      KAFKA_HEAP_OPTS: -Xms32m -Xmx128m
+    configs:
+      - source: kafka-client
+        target: /etc/kafka/client.properties
+      - source: kafka-init-script
+        target: /etc/kafka/init-topics.sh
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+    restart: "no"
+
   pgadmin:
     image: dpage/pgadmin4:9.18
     environment:
@@ -42,6 +122,7 @@ services:
     environment:
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka-1:9092,kafka-2:9092,kafka-3:9092}
       USER_R2DBC_URL: r2dbc:postgresql://users-db:5432/users
       USER_JDBC_URL: jdbc:postgresql://users-db:5432/users
       USER_DB_USERNAME: ${USER_DB_USERNAME:-users}
@@ -205,6 +286,7 @@ services:
       EUREKA_URL: http://discovery-server:8761/eureka/
       JWT_ISSUER: ${JWT_ISSUER:-http://task-tracker}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-task-tracker-api}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka-1:9092,kafka-2:9092,kafka-3:9092}
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-vs_lab1}
       DB_USERNAME: ${POSTGRES_USER:-vs_lab1}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-vs_lab1}
@@ -235,6 +317,9 @@ services:
     restart: unless-stopped
 
 volumes:
+  kafka-1-data:
+  kafka-2-data:
+  kafka-3-data:
   pgadmin-data:
   redisinsight-data:
   users-data:
@@ -242,6 +327,10 @@ volumes:
   redis-data:
 
 configs:
+  kafka-client:
+    file: ./infra/kafka/client.properties
+  kafka-init-script:
+    file: ./infra/kafka/init-topics.sh
   pgadmin-servers:
     content: |
       {
