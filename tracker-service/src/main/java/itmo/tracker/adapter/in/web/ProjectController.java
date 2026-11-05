@@ -1,0 +1,215 @@
+package itmo.tracker.adapter.in.web;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+import itmo.tracker.application.model.PageQuery;
+import itmo.tracker.application.model.ResultPage;
+import itmo.tracker.application.port.in.ProjectService;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.server.reactive.ServerHttpResponse;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.util.UriComponentsBuilder;
+
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+import java.net.URI;
+
+@Validated
+@RestController
+@RequestMapping("/api/v1/projects")
+@Tag(name = "Projects", description = "Project management")
+public class ProjectController {
+
+    private final ProjectService projectService;
+
+    private final BlockingOperations blocking;
+
+    public ProjectController(ProjectService projectService, BlockingOperations blocking) {
+        this.projectService = projectService;
+        this.blocking = blocking;
+    }
+
+    @PostMapping
+    @Operation(summary = "Create a project")
+    @ApiResponse(
+            responseCode = "201",
+            description = "Project created",
+            headers =
+                    @Header(
+                            name = "Location",
+                            description = "URI of the created project",
+                            schema = @Schema(type = "string", format = "uri")),
+            content = @Content(schema = @Schema(implementation = ProjectResponse.class)))
+    @ApiResponse(
+            responseCode = "400",
+            description = "Request validation failed",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    @ApiResponse(
+            responseCode = "409",
+            description = "Project code is already used",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    @ResponseStatus(HttpStatus.CREATED)
+    public Mono<ProjectResponse> create(
+            @Valid @RequestBody CreateProjectRequest request, ServerWebExchange exchange) {
+        return CurrentUser.current()
+                .flatMap(
+                        actor ->
+                                blocking.call(
+                                        () -> {
+                                            ProjectResponse response =
+                                                    WebMapper.toResponse(
+                                                            projectService.create(
+                                                                    WebMapper.toCommand(request),
+                                                                    actor));
+                                            URI location =
+                                                    UriComponentsBuilder.fromUri(
+                                                                    exchange.getRequest().getURI())
+                                                            .path("/{id}")
+                                                            .buildAndExpand(response.id())
+                                                            .toUri();
+                                            exchange.getResponse()
+                                                    .getHeaders()
+                                                    .setLocation(location);
+                                            return response;
+                                        }));
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Get a project by id")
+    @ApiResponse(
+            responseCode = "200",
+            description = "Project found",
+            content = @Content(schema = @Schema(implementation = ProjectResponse.class)))
+    @ApiResponse(
+            responseCode = "404",
+            description = "Project not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    public Mono<ProjectResponse> findById(
+            @Parameter(description = "Project identifier", example = "1") @PathVariable Long id) {
+        return blocking.call(() -> WebMapper.toResponse(projectService.findById(id)));
+    }
+
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Get a page of projects")
+    @ApiResponse(
+            responseCode = "200",
+            description = "Page returned",
+            headers =
+                    @Header(
+                            name = "X-Total-Count",
+                            description = "Total number of projects",
+                            schema = @Schema(type = "integer", format = "int64")),
+            content =
+                    @Content(
+                            array =
+                                    @ArraySchema(
+                                            schema =
+                                                    @Schema(
+                                                            implementation =
+                                                                    ProjectResponse.class))))
+    @ApiResponse(
+            responseCode = "400",
+            description = "Invalid page or size",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    public Flux<ProjectResponse> findAll(
+            @Parameter(description = "Zero-based page number", example = "0")
+                    @RequestParam(defaultValue = "0")
+                    @Min(0)
+                    int page,
+            @Parameter(description = "Page size from 1 to 50", example = "20")
+                    @RequestParam(defaultValue = "20")
+                    @Min(1)
+                    @Max(50)
+                    int size,
+            ServerHttpResponse response) {
+        return blocking.call(
+                        () -> {
+                            ResultPage<ProjectResponse> result =
+                                    projectService
+                                            .findAll(PageQuery.of(page, size))
+                                            .map(WebMapper::toResponse);
+                            response.getHeaders()
+                                    .set(
+                                            "X-Total-Count",
+                                            String.valueOf(result.getTotalElements()));
+                            return result.getContent();
+                        })
+                .flatMapMany(Flux::fromIterable);
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Replace a project")
+    @ApiResponse(
+            responseCode = "200",
+            description = "Project updated",
+            content = @Content(schema = @Schema(implementation = ProjectResponse.class)))
+    @ApiResponse(
+            responseCode = "400",
+            description = "Request validation failed",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    @ApiResponse(
+            responseCode = "404",
+            description = "Project not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    @ApiResponse(
+            responseCode = "409",
+            description = "Project code is already used",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    public Mono<ProjectResponse> update(
+            @Parameter(description = "Project identifier", example = "1") @PathVariable Long id,
+            @Valid @RequestBody UpdateProjectRequest request) {
+        return CurrentUser.current()
+                .flatMap(
+                        actor ->
+                                blocking.call(
+                                        () ->
+                                                WebMapper.toResponse(
+                                                        projectService.update(
+                                                                id,
+                                                                WebMapper.toCommand(request),
+                                                                actor))));
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Delete a project")
+    @ApiResponse(responseCode = "204", description = "Project deleted")
+    @ApiResponse(
+            responseCode = "404",
+            description = "Project not found",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    @ApiResponse(
+            responseCode = "409",
+            description = "Project is referenced by another record",
+            content = @Content(schema = @Schema(implementation = ApiError.class)))
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public Mono<Void> delete(
+            @Parameter(description = "Project identifier", example = "1") @PathVariable Long id) {
+        return CurrentUser.current()
+                .flatMap(actor -> blocking.run(() -> projectService.delete(id, actor)));
+    }
+}

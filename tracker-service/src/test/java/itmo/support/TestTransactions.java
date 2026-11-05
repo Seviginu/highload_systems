@@ -1,13 +1,8 @@
 package itmo.support;
-
-import org.springframework.transaction.support.SimpleTransactionStatus;
-import org.springframework.transaction.support.TransactionCallback;
-import org.springframework.transaction.support.TransactionOperations;
-
-/** Executes local business logic in unit tests; actual rollback is checked in ITs. */
-public class TestTransactions implements TransactionOperations {
-    @Override
-    public <T> T execute(TransactionCallback<T> callback) {
-        return callback.doInTransaction(new SimpleTransactionStatus());
-    }
+import itmo.tracker.application.port.out.UnitOfWork;
+import java.util.function.Supplier;
+/** Unit tests run directly; real rollback is checked with PostgreSQL in ITs. */
+public class TestTransactions implements UnitOfWork {
+    public <T> T write(Supplier<T> operation) { return operation.get(); }
+    public <T> T read(Supplier<T> operation) { return operation.get(); }
 }

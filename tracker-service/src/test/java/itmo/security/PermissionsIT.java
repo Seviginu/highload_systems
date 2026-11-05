@@ -1,14 +1,15 @@
 package itmo.security;
 
-import itmo.project.entity.Project;
-import itmo.project.entity.ProjectMember;
-import itmo.project.entity.ProjectStatus;
-import itmo.project.repository.ProjectMemberRepository;
-import itmo.project.repository.ProjectRepository;
+import itmo.tracker.application.model.TaskView;
+import itmo.tracker.adapter.out.persistence.ProjectEntity;
+import itmo.tracker.adapter.out.persistence.ProjectMemberEntity;
+import itmo.tracker.domain.ProjectStatus;
+import itmo.tracker.adapter.out.persistence.ProjectMemberRepository;
+import itmo.tracker.adapter.out.persistence.ProjectRepository;
 import itmo.support.TestUser;
 import itmo.support.UserApiStub;
-import itmo.task.dto.TaskResponse;
-import itmo.task.entity.TaskStatus;
+import itmo.tracker.adapter.in.web.TaskResponse;
+import itmo.tracker.domain.TaskStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,8 +58,8 @@ class PermissionsIT {
     private TestUser developer;
     private TestUser other;
     private TestUser outsider;
-    private Project project;
-    private Project target;
+    private ProjectEntity project;
+    private ProjectEntity target;
 
     @BeforeEach
     void prepare() {
@@ -73,19 +74,19 @@ class PermissionsIT {
         developer = USERS.create(new TestUser("DEVELOPER"));
         other = USERS.create(new TestUser("DEVELOPER"));
         outsider = USERS.create(new TestUser("TEAM_LEAD"));
-        project = projects.saveAndFlush(new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE));
-        target = projects.saveAndFlush(new Project("Target", "TARGET", null, ProjectStatus.ACTIVE));
-        members.saveAndFlush(new ProjectMember(project, lead.getId()));
-        members.saveAndFlush(new ProjectMember(project, developer.getId()));
-        members.saveAndFlush(new ProjectMember(project, other.getId()));
-        members.saveAndFlush(new ProjectMember(target, outsider.getId()));
+        project = projects.saveAndFlush(new ProjectEntity("Platform", "PLATFORM", null, ProjectStatus.ACTIVE));
+        target = projects.saveAndFlush(new ProjectEntity("Target", "TARGET", null, ProjectStatus.ACTIVE));
+        members.saveAndFlush(new ProjectMemberEntity(project, lead.getId()));
+        members.saveAndFlush(new ProjectMemberEntity(project, developer.getId()));
+        members.saveAndFlush(new ProjectMemberEntity(project, other.getId()));
+        members.saveAndFlush(new ProjectMemberEntity(target, outsider.getId()));
     }
 
     @Test
     void shouldAssignCurrentLeadAndRestrictProjectMutations() {
         var create = Map.of("name", "New", "code", "NEW", "status", "ACTIVE", "teamLeadId", lead.getId());
         Long created = as(lead).post().uri("/api/v1/projects").bodyValue(create).exchange().expectStatus().isCreated()
-                .expectBody(itmo.project.dto.ProjectResponse.class).returnResult().getResponseBody().id();
+                .expectBody(itmo.tracker.adapter.in.web.ProjectResponse.class).returnResult().getResponseBody().id();
         assertThat(members.existsByProjectIdAndUserIdAndActiveTrue(created, lead.getId())).isTrue();
         as(outsider).post().uri("/api/v1/projects").bodyValue(create).exchange().expectStatus().isForbidden();
         as(developer).post().uri("/api/v1/projects").bodyValue(create).exchange().expectStatus().isForbidden();
@@ -136,7 +137,7 @@ class PermissionsIT {
         as(developer).patch().uri("/api/v1/tasks/{id}/status", task.id()).bodyValue(malicious).exchange().expectStatus().isOk()
                 .expectBody().jsonPath("$.status").isEqualTo("IN_PROGRESS")
                 .jsonPath("$.assigneeId").isEqualTo(developer.getId()).jsonPath("$.projectId").isEqualTo(project.getId());
-        TaskResponse updated = cache.getCache("tasks").get(task.id(), TaskResponse.class);
+        TaskView updated = cache.getCache("tasks").get(task.id(), TaskView.class);
         assertThat(updated.status()).isEqualTo(TaskStatus.IN_PROGRESS);
         assertThat(updated.version()).isEqualTo(task.version() + 1);
         as(other).patch().uri("/api/v1/tasks/{id}/status", task.id())
@@ -145,7 +146,7 @@ class PermissionsIT {
                 .bodyValue(Map.of("status", "DONE", "version", updated.version())).exchange().expectStatus().isForbidden();
         as(developer).patch().uri("/api/v1/tasks/{id}/status", task.id())
                 .bodyValue(Map.of("status", "DONE", "version", task.version())).exchange().expectStatus().isEqualTo(409);
-        assertThat(cache.getCache("tasks").get(task.id(), TaskResponse.class)).isEqualTo(updated);
+        assertThat(cache.getCache("tasks").get(task.id(), TaskView.class)).usingRecursiveComparison().isEqualTo(updated);
         jdbc.update("UPDATE project_members SET active = false WHERE project_id = ? AND user_id = ?", project.getId(), developer.getId());
         as(developer).patch().uri("/api/v1/tasks/{id}/status", task.id())
                 .bodyValue(Map.of("status", "DONE", "version", updated.version())).exchange().expectStatus().isForbidden();
@@ -168,7 +169,7 @@ class PermissionsIT {
         }
         assertThat(jdbc.queryForObject("SELECT count(*) FROM tasks", Long.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT version FROM tasks WHERE id = ?", Long.class, task.id())).isEqualTo(task.version());
-        assertThat(cache.getCache("tasks").get(task.id(), TaskResponse.class)).isEqualTo(task);
+        assertThat(cache.getCache("tasks").get(task.id(), TaskView.class)).usingRecursiveComparison().isEqualTo(task);
     }
 
     @Test
@@ -177,7 +178,7 @@ class PermissionsIT {
         var move = Map.of("projectId", target.getId(), "labelIds", Set.of(), "version", task.version());
         as(lead).post().uri("/api/v1/tasks/{id}/move", task.id()).bodyValue(move).exchange().expectStatus().isForbidden();
         assertThat(jdbc.queryForObject("SELECT project_id FROM tasks WHERE id = ?", Long.class, task.id())).isEqualTo(project.getId());
-        members.saveAndFlush(new ProjectMember(target, lead.getId()));
+        members.saveAndFlush(new ProjectMemberEntity(target, lead.getId()));
         as(lead).post().uri("/api/v1/tasks/{id}/move", task.id()).bodyValue(move).exchange().expectStatus().isOk()
                 .expectBody().jsonPath("$.projectId").isEqualTo(target.getId());
     }
@@ -204,10 +205,30 @@ class PermissionsIT {
             as(user).post().uri("/api/v1/labels").bodyValue(body).exchange().expectStatus().isForbidden();
         }
         var label = admin().post().uri("/api/v1/labels").bodyValue(body).exchange().expectStatus().isCreated()
-                .expectBody(itmo.label.dto.LabelResponse.class).returnResult().getResponseBody();
+                .expectBody(itmo.tracker.adapter.in.web.LabelResponse.class).returnResult().getResponseBody();
         as(lead).put().uri("/api/v1/labels/{id}", label.id()).bodyValue(body).exchange().expectStatus().isForbidden();
         as(developer).delete().uri("/api/v1/labels/{id}", label.id()).exchange().expectStatus().isForbidden();
         admin().delete().uri("/api/v1/labels/{id}", label.id()).exchange().expectStatus().isNoContent();
+    }
+
+    @Test
+    void shouldKeepVersionAndLabelsWhenStatusDoesNotChange() {
+        var label = admin().post().uri("/api/v1/labels")
+                .bodyValue(Map.of("name", "Bug", "color", "#FF0000"))
+                .exchange().expectStatus().isCreated()
+                .expectBody(itmo.tracker.adapter.in.web.LabelResponse.class).returnResult().getResponseBody();
+        var body = taskBody();
+        body.put("labelIds", Set.of(label.id()));
+        TaskResponse original = admin().post().uri("/api/v1/tasks").bodyValue(body)
+                .exchange().expectStatus().isCreated().expectBody(TaskResponse.class).returnResult().getResponseBody();
+        TaskResponse unchanged = as(developer).patch().uri("/api/v1/tasks/{id}/status", original.id())
+                .bodyValue(Map.of("status", original.status(), "version", original.version()))
+                .exchange().expectStatus().isOk().expectBody(TaskResponse.class).returnResult().getResponseBody();
+        assertThat(unchanged).isEqualTo(original);
+        assertThat(cache.getCache("tasks").get(original.id(), TaskView.class))
+                .usingRecursiveComparison().isEqualTo(original);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM task_labels WHERE task_id = ?", Long.class, original.id()))
+                .isEqualTo(1L);
     }
 
     private TaskResponse task() {

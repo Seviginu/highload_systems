@@ -1,14 +1,14 @@
 package itmo.project;
 
-import itmo.project.dto.AddProjectMemberRequest;
-import itmo.project.dto.CreateProjectRequest;
-import itmo.project.dto.ProjectMemberResponse;
-import itmo.project.dto.ProjectResponse;
-import itmo.project.dto.UpdateProjectRequest;
-import itmo.project.entity.Project;
-import itmo.project.entity.ProjectStatus;
-import itmo.project.repository.ProjectMemberRepository;
-import itmo.project.repository.ProjectRepository;
+import itmo.tracker.adapter.in.web.AddProjectMemberRequest;
+import itmo.tracker.adapter.in.web.CreateProjectRequest;
+import itmo.tracker.adapter.in.web.ProjectMemberResponse;
+import itmo.tracker.adapter.in.web.ProjectResponse;
+import itmo.tracker.adapter.in.web.UpdateProjectRequest;
+import itmo.tracker.adapter.out.persistence.ProjectEntity;
+import itmo.tracker.domain.ProjectStatus;
+import itmo.tracker.adapter.out.persistence.ProjectMemberRepository;
+import itmo.tracker.adapter.out.persistence.ProjectRepository;
 import itmo.support.TestUser;
 import itmo.support.UserApiStub;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -307,7 +307,7 @@ class ProjectIT {
 
     @Test
     void shouldValidateProjectEntity() {
-        Project invalidProject = new Project(" ", "1-invalid", null, null);
+        ProjectEntity invalidProject = new ProjectEntity(" ", "1-invalid", null, null);
 
         Set<String> invalidFields = validator.validate(invalidProject).stream()
                 .map(violation -> violation.getPropertyPath().toString())

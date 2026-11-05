@@ -1,6 +1,6 @@
 package itmo.security;
 
-import itmo.infrastructure.security.CurrentUser;
+import itmo.tracker.adapter.in.web.CurrentUser;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
 import reactor.test.StepVerifier;
@@ -19,7 +19,7 @@ class CurrentUserTest {
     @Test
     void shouldKeepRolesImmutable() {
         var roles = new HashSet<>(Set.of("TEAM_LEAD"));
-        var actor = new CurrentUser(1, roles);
+        var actor = new itmo.tracker.application.model.Actor(1, roles);
         roles.add("ADMIN");
         assertThat(actor.roles()).containsExactly("TEAM_LEAD");
         assertThat(actor.isAdmin()).isFalse();

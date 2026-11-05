@@ -1,10 +1,10 @@
 package itmo.label;
 
-import itmo.label.dto.CreateLabelRequest;
-import itmo.label.dto.LabelResponse;
-import itmo.label.dto.UpdateLabelRequest;
-import itmo.label.entity.Label;
-import itmo.label.repository.LabelRepository;
+import itmo.tracker.adapter.in.web.CreateLabelRequest;
+import itmo.tracker.adapter.in.web.LabelResponse;
+import itmo.tracker.adapter.in.web.UpdateLabelRequest;
+import itmo.tracker.adapter.out.persistence.LabelEntity;
+import itmo.tracker.adapter.out.persistence.LabelRepository;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -153,7 +153,7 @@ class LabelIT {
 
     @Test
     void shouldRejectDeletingLabelReferencedByTasks() {
-        Label label = labelRepository.saveAndFlush(new Label("Backend", null));
+        LabelEntity label = labelRepository.saveAndFlush(new LabelEntity("Backend", null));
         Long userId = jdbcTemplate.queryForObject(
                 """
                         INSERT INTO users (name, email, role)
@@ -202,7 +202,7 @@ class LabelIT {
 
     @Test
     void shouldValidateLabelEntity() {
-        Label invalidLabel = new Label(" ", "red");
+        LabelEntity invalidLabel = new LabelEntity(" ", "red");
 
         Set<String> invalidFields = validator.validate(invalidLabel).stream()
                 .map(violation -> violation.getPropertyPath().toString())

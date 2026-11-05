@@ -1,20 +1,21 @@
 package itmo.task;
 
-import itmo.label.entity.Label;
-import itmo.label.repository.LabelRepository;
-import itmo.project.entity.Project;
-import itmo.project.entity.ProjectMember;
-import itmo.project.entity.ProjectStatus;
-import itmo.project.repository.ProjectMemberRepository;
-import itmo.project.repository.ProjectRepository;
-import itmo.task.dto.CreateTaskRequest;
-import itmo.task.dto.MoveTaskRequest;
-import itmo.task.dto.TaskResponse;
-import itmo.task.dto.UpdateTaskRequest;
-import itmo.task.entity.Task;
-import itmo.task.entity.TaskPriority;
-import itmo.task.entity.TaskStatus;
-import itmo.task.repository.TaskRepository;
+import itmo.tracker.application.model.TaskView;
+import itmo.tracker.adapter.out.persistence.LabelEntity;
+import itmo.tracker.adapter.out.persistence.LabelRepository;
+import itmo.tracker.adapter.out.persistence.ProjectEntity;
+import itmo.tracker.adapter.out.persistence.ProjectMemberEntity;
+import itmo.tracker.domain.ProjectStatus;
+import itmo.tracker.adapter.out.persistence.ProjectMemberRepository;
+import itmo.tracker.adapter.out.persistence.ProjectRepository;
+import itmo.tracker.adapter.in.web.CreateTaskRequest;
+import itmo.tracker.adapter.in.web.MoveTaskRequest;
+import itmo.tracker.adapter.in.web.TaskResponse;
+import itmo.tracker.adapter.in.web.UpdateTaskRequest;
+import itmo.tracker.adapter.out.persistence.TaskEntity;
+import itmo.tracker.domain.TaskPriority;
+import itmo.tracker.domain.TaskStatus;
+import itmo.tracker.adapter.out.persistence.TaskRepository;
 import itmo.support.TestUser;
 import itmo.support.UserApiStub;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -130,7 +131,7 @@ class TaskIT {
         ).getBody();
         assertThat(created).isNotNull();
 
-        TaskResponse cachedAfterCreate = taskCache().get(created.id(), TaskResponse.class);
+        TaskView cachedAfterCreate = taskCache().get(created.id(), TaskView.class);
         assertThat(cachedAfterCreate).isNotNull();
         assertThat(cachedAfterCreate.title()).isEqualTo("First task");
         assertThat(redisTemplate.getExpire("tasks::" + created.id(), TimeUnit.SECONDS))
@@ -145,7 +146,7 @@ class TaskIT {
         );
         assertThat(loadedFromDatabase).isNotNull();
         assertThat(loadedFromDatabase.title()).isEqualTo("Loaded from database");
-        assertThat(taskCache().get(created.id(), TaskResponse.class)).isNotNull();
+        assertThat(taskCache().get(created.id(), TaskView.class)).isNotNull();
 
         jdbcTemplate.update("UPDATE tasks SET title = ? WHERE id = ?", "Changed outside service", created.id());
         TaskResponse cachedRead = restTemplate.getForObject(
@@ -175,7 +176,7 @@ class TaskIT {
         );
 
         assertThat(updateResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-        TaskResponse cachedAfterUpdate = taskCache().get(created.id(), TaskResponse.class);
+        TaskView cachedAfterUpdate = taskCache().get(created.id(), TaskView.class);
         assertThat(cachedAfterUpdate).isNotNull();
         assertThat(cachedAfterUpdate.title()).isEqualTo("Updated through service");
 
@@ -226,9 +227,9 @@ class TaskIT {
         assertThat(created.labelIds()).containsExactly(data.label().getId());
         assertThat(created.version()).isZero();
 
-        Task persisted = taskRepository.findById(created.id()).orElseThrow();
+        TaskEntity persisted = taskRepository.findById(created.id()).orElseThrow();
         assertThat(persisted.getProject().getId()).isEqualTo(data.project().getId());
-        assertThat(persisted.getLabels()).extracting(Label::getId).containsExactly(data.label().getId());
+        assertThat(persisted.getLabels()).extracting(LabelEntity::getId).containsExactly(data.label().getId());
 
         var listResponse = restTemplate.getForEntity("/api/v1/tasks?page=0&size=20", TaskResponse[].class);
         assertThat(listResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -314,12 +315,12 @@ class TaskIT {
         TestUser anotherAssignee = USERS.create(
                 new TestUser("DEVELOPER")
         );
-        Project anotherProject = projectRepository.saveAndFlush(
-                new Project("Mobile", "MOBILE", null, ProjectStatus.ACTIVE)
+        ProjectEntity anotherProject = projectRepository.saveAndFlush(
+                new ProjectEntity("Mobile", "MOBILE", null, ProjectStatus.ACTIVE)
         );
-        projectMemberRepository.saveAndFlush(new ProjectMember(anotherProject, anotherAssignee.getId()));
+        projectMemberRepository.saveAndFlush(new ProjectMemberEntity(anotherProject, anotherAssignee.getId()));
         currentUserId = anotherAuthor.getId();
-        Label anotherLabel = labelRepository.saveAndFlush(new Label("Mobile", "#445566"));
+        LabelEntity anotherLabel = labelRepository.saveAndFlush(new LabelEntity("Mobile", "#445566"));
         restTemplate.postForEntity(
                 "/api/v1/tasks",
                 new CreateTaskRequest(
@@ -444,14 +445,14 @@ class TaskIT {
     @Test
     void shouldMoveTaskAtomicallyAndRejectNonMemberAssignee() {
         TestData data = createTestData();
-        Project targetProject = projectRepository.saveAndFlush(
-                new Project("Mobile", "MOBILE", null, ProjectStatus.ACTIVE)
+        ProjectEntity targetProject = projectRepository.saveAndFlush(
+                new ProjectEntity("Mobile", "MOBILE", null, ProjectStatus.ACTIVE)
         );
-        Project rejectedProject = projectRepository.saveAndFlush(
-                new Project("Analytics", "ANALYTICS", null, ProjectStatus.ACTIVE)
+        ProjectEntity rejectedProject = projectRepository.saveAndFlush(
+                new ProjectEntity("Analytics", "ANALYTICS", null, ProjectStatus.ACTIVE)
         );
-        Label targetLabel = labelRepository.saveAndFlush(new Label("Mobile", "#445566"));
-        projectMemberRepository.saveAndFlush(new ProjectMember(targetProject, data.assignee().getId()));
+        LabelEntity targetLabel = labelRepository.saveAndFlush(new LabelEntity("Mobile", "#445566"));
+        projectMemberRepository.saveAndFlush(new ProjectMemberEntity(targetProject, data.assignee().getId()));
         TaskResponse created = restTemplate.postForEntity(
                 "/api/v1/tasks",
                 createRequest(data, "PLATFORM-1"),
@@ -478,7 +479,7 @@ class TaskIT {
         assertThat(moved.assigneeId()).isEqualTo(data.assignee().getId());
         assertThat(moved.labelIds()).containsExactly(targetLabel.getId());
         assertThat(moved.version()).isEqualTo(created.version() + 1);
-        TaskResponse cachedAfterMove = taskCache().get(created.id(), TaskResponse.class);
+        TaskView cachedAfterMove = taskCache().get(created.id(), TaskView.class);
         assertThat(cachedAfterMove).isNotNull();
         assertThat(cachedAfterMove.projectId()).isEqualTo(targetProject.getId());
 
@@ -496,18 +497,18 @@ class TaskIT {
 
         assertThat(rejectedResponse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(rejectedResponse.getBody()).contains("not an active member");
-        Task persisted = taskRepository.findById(created.id()).orElseThrow();
+        TaskEntity persisted = taskRepository.findById(created.id()).orElseThrow();
         assertThat(persisted.getProject().getId()).isEqualTo(targetProject.getId());
         assertThat(persisted.getAssigneeId()).isEqualTo(data.assignee().getId());
-        assertThat(persisted.getLabels()).extracting(Label::getId).containsExactly(targetLabel.getId());
+        assertThat(persisted.getLabels()).extracting(LabelEntity::getId).containsExactly(targetLabel.getId());
         assertThat(persisted.getVersion()).isEqualTo(moved.version());
     }
 
     @Test
     void shouldRejectProjectChangeThroughRegularUpdate() {
         TestData data = createTestData();
-        Project targetProject = projectRepository.saveAndFlush(
-                new Project("Mobile", "MOBILE", null, ProjectStatus.ACTIVE)
+        ProjectEntity targetProject = projectRepository.saveAndFlush(
+                new ProjectEntity("Mobile", "MOBILE", null, ProjectStatus.ACTIVE)
         );
         TaskResponse created = restTemplate.postForEntity(
                 "/api/v1/tasks",
@@ -536,14 +537,14 @@ class TaskIT {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody()).contains("move operation");
-        Task persisted = taskRepository.findById(created.id()).orElseThrow();
+        TaskEntity persisted = taskRepository.findById(created.id()).orElseThrow();
         assertThat(persisted.getProject().getId()).isEqualTo(data.project().getId());
     }
 
     @Test
     void shouldValidateTaskEntity() {
         TestData data = createTestData();
-        Task invalidTask = new Task(
+        TaskEntity invalidTask = new TaskEntity(
                 "bad",
                 " ",
                 null,
@@ -636,12 +637,12 @@ class TaskIT {
         TestUser assignee = USERS.create(
                 new TestUser("DEVELOPER")
         );
-        Project project = projectRepository.saveAndFlush(
-                new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE)
+        ProjectEntity project = projectRepository.saveAndFlush(
+                new ProjectEntity("Platform", "PLATFORM", null, ProjectStatus.ACTIVE)
         );
         currentUserId = author.getId();
-        projectMemberRepository.saveAndFlush(new ProjectMember(project, assignee.getId()));
-        Label label = labelRepository.saveAndFlush(new Label("Backend", "#112233"));
+        projectMemberRepository.saveAndFlush(new ProjectMemberEntity(project, assignee.getId()));
+        LabelEntity label = labelRepository.saveAndFlush(new LabelEntity("Backend", "#112233"));
         return new TestData(author, assignee, project, label);
     }
 
@@ -662,6 +663,6 @@ class TaskIT {
         return Objects.requireNonNull(cacheManager.getCache("tasks"));
     }
 
-    private record TestData(TestUser author, TestUser assignee, Project project, Label label) {
+    private record TestData(TestUser author, TestUser assignee, ProjectEntity project, LabelEntity label) {
     }
 }

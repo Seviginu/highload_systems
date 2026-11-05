@@ -1,0 +1,152 @@
+package itmo.tracker.application.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import itmo.support.TestTransactions;
+import itmo.support.TestUser;
+import itmo.tracker.application.exception.ConflictException;
+import itmo.tracker.application.exception.ResourceNotFoundException;
+import itmo.tracker.application.mapper.ProjectMemberMapper;
+import itmo.tracker.application.model.AddProjectMemberCommand;
+import itmo.tracker.application.model.PageQuery;
+import itmo.tracker.application.model.ProjectMemberView;
+import itmo.tracker.application.model.ResultPage;
+import itmo.tracker.application.port.out.ProjectMemberStore;
+import itmo.tracker.application.port.out.ProjectStore;
+import itmo.tracker.application.port.out.UserDirectoryPort;
+import itmo.tracker.domain.Project;
+import itmo.tracker.domain.ProjectMember;
+import itmo.tracker.domain.ProjectStatus;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.List;
+import java.util.Optional;
+
+@ExtendWith(MockitoExtension.class)
+class ProjectMemberServiceImplTest {
+
+    @Mock private ProjectMemberStore memberRepository;
+
+    @Mock private ProjectStore projectRepository;
+
+    @Mock private UserDirectoryPort userDirectory;
+
+    private ProjectMemberServiceImpl memberService;
+    private Project project;
+    private TestUser user;
+
+    @BeforeEach
+    void setUp() {
+        memberService =
+                new ProjectMemberServiceImpl(
+                        itmo.support.TestActors.access(),
+                        memberRepository,
+                        projectRepository,
+                        userDirectory,
+                        new TestTransactions(),
+                        new ProjectMemberMapper());
+        project = new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE);
+        user = new TestUser("DEVELOPER");
+        ReflectionTestUtils.setField(project, "id", 1L);
+        ReflectionTestUtils.setField(user, "id", 2L);
+    }
+
+    @Test
+    void shouldAddMember() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
+        when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.empty());
+        when(memberRepository.save(any(ProjectMember.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response =
+                memberService.add(
+                        1L, new AddProjectMemberCommand(2L), itmo.support.TestActors.admin());
+
+        assertThat(response.projectId()).isEqualTo(1L);
+        assertThat(response.userId()).isEqualTo(2L);
+        assertThat(response.active()).isTrue();
+    }
+
+    @Test
+    void shouldRejectActiveDuplicate() {
+        ProjectMember existing = new ProjectMember(project, user.getId());
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
+        when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.of(existing));
+        AddProjectMemberCommand request = new AddProjectMemberCommand(2L);
+
+        assertThatThrownBy(() -> memberService.add(1L, request, itmo.support.TestActors.admin()))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("already an active member");
+        verify(memberRepository, never()).save(existing);
+    }
+
+    @Test
+    void shouldReactivateInactiveMember() {
+        ProjectMember existing = new ProjectMember(project, user.getId());
+        existing.deactivate();
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
+        when(memberRepository.findByProjectIdAndUserId(1L, 2L)).thenReturn(Optional.of(existing));
+        when(memberRepository.save(existing)).thenReturn(existing);
+
+        var response =
+                memberService.add(
+                        1L, new AddProjectMemberCommand(2L), itmo.support.TestActors.admin());
+
+        assertThat(response.active()).isTrue();
+    }
+
+    @Test
+    void shouldReturnMemberPage() {
+        ProjectMember member = new ProjectMember(project, user.getId());
+        PageQuery pageable = PageQuery.of(0, 20);
+        when(projectRepository.existsById(1L)).thenReturn(true);
+        when(memberRepository.findAllByProjectId(1L, pageable))
+                .thenReturn(new ResultPage<>(List.of(member), 1));
+
+        var result = memberService.findAll(1L, pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent()).extracting(ProjectMemberView::userId).containsExactly(2L);
+    }
+
+    @Test
+    void shouldCheckActiveMembership() {
+        when(memberRepository.existsByProjectIdAndUserIdAndActiveTrue(1L, 2L)).thenReturn(true);
+
+        assertThat(memberService.isActiveMember(1L, 2L)).isTrue();
+    }
+
+    @Test
+    void shouldDeactivateMember() {
+        ProjectMember member = new ProjectMember(project, user.getId());
+        when(projectRepository.existsById(1L)).thenReturn(true);
+        when(memberRepository.findByIdAndProjectId(3L, 1L)).thenReturn(Optional.of(member));
+        when(memberRepository.save(member)).thenReturn(member);
+
+        memberService.deactivate(1L, 3L, itmo.support.TestActors.admin());
+
+        assertThat(member.isActive()).isFalse();
+        verify(memberRepository).save(member);
+    }
+
+    @Test
+    void shouldReportMissingProject() {
+        when(projectRepository.existsById(42L)).thenReturn(false);
+        PageQuery pageable = PageQuery.of(0, 20);
+
+        assertThatThrownBy(() -> memberService.findAll(42L, pageable))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("42");
+    }
+}
