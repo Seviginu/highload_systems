@@ -26,9 +26,10 @@ public class UseCaseConfiguration {
             ProjectMemberStore members,
             ProjectStore projects,
             UserDirectoryPort users,
-            UnitOfWork transactions) {
+            UnitOfWork transactions,
+            ProjectMemberships events) {
         return new ProjectMemberServiceImpl(
-                access, members, projects, users, transactions, new ProjectMemberMapper());
+                access, members, projects, users, transactions, new ProjectMemberMapper(), events);
     }
 
     @Bean
@@ -51,7 +52,8 @@ public class UseCaseConfiguration {
             UserDirectoryPort users,
             UnitOfWork transactions,
             LabelService labels,
-            TaskAssignments assignments) {
+            TaskAssignments assignments,
+            TaskStatusChanges statusChanges) {
         return new CachedTaskService(
                 new TaskServiceImpl(
                         access,
@@ -62,6 +64,7 @@ public class UseCaseConfiguration {
                         users,
                         transactions,
                         labels,
-                        assignments));
+                        assignments,
+                        statusChanges));
     }
 }

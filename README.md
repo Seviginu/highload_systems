@@ -1,6 +1,6 @@
 # Task tracker — лабораторные работы по JVM
 
-Java 21, Maven, Spring Boot. После этапа 4 ЛР4 проект состоит из `user-service` (WebFlux/R2DBC), `tracker-service` и `notification-service` (WebFlux/JPA), Gateway, Eureka и Config Server. PostgreSQL, Redis и три брокера Kafka запускаются через Docker Compose.
+Java 21, Maven, Spring Boot. После этапа 5 ЛР4 проект состоит из `user-service` (WebFlux/R2DBC), `tracker-service` и `notification-service` (WebFlux/JPA), Gateway, Eureka и Config Server. PostgreSQL, Redis и три брокера Kafka запускаются через Docker Compose.
 
 [Соответствие требованиям ЛР1–3, результаты проверки и сценарий сдачи](docs/LAB3_HANDOFF.md).
 
@@ -10,7 +10,7 @@ Java 21, Maven, Spring Boot. После этапа 4 ЛР4 проект сост
 
 После этапа 2 `tracker-service` использует те же слои в `itmo.tracker`. Сценарии работают с доменными моделями и портами `TaskStore`, `ProjectStore`, `ProjectMemberStore`, `LabelStore`, `UserDirectoryPort`, `UnitOfWork`. JPA-модели и связи находятся в persistence-адаптере; команды/результаты отделены от REST DTO. `SpringUnitOfWork` обеспечивает локальные транзакции, `CachedTaskService` — кэш. Данные `Actor` передаются из проверенного JWT в бизнес-логику, а JWT для Feign остается во внешнем Security Context. ArchUnit запрещает framework-зависимости domain/application и обратные зависимости адаптеров.
 
-Этап 3 добавляет Kafka-кластер из трех брокеров KRaft и шесть реплицированных топиков. [Конфигурация, запуск и результаты проверки](docs/LAB4_KAFKA.md). Изолированная проверка отказа лидера и сохранности данных: `./scripts/kafka-smoke.sh`. С этапа 4 трекер публикует TaskAssigned для сервиса уведомлений.
+Этап 3 добавляет Kafka-кластер из трех брокеров KRaft и шесть реплицированных топиков. [Конфигурация, запуск и результаты проверки](docs/LAB4_KAFKA.md). Изолированная проверка отказа лидера и сохранности данных: `./scripts/kafka-smoke.sh`. С этапов 4–5 трекер публикует TaskAssigned, TaskStatusChanged и ProjectMemberAdded для сервиса уведомлений; настроены повторы, DLT и очистка опубликованного outbox. [Правила событий и проверки](docs/LAB4_NOTIFICATIONS.md).
 
 Этап 4 добавляет `notification-service` и события назначения задач через транзакционный outbox/Kafka. [API, надежность и проверка](docs/LAB4_NOTIFICATIONS.md). Общий Swagger содержит три сервиса. Сквозная проверка в отдельном Docker-стенде: `python3 scripts/notifications-smoke.py`.
 

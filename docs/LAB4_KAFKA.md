@@ -21,7 +21,7 @@
 
 В общей конфигурации Config Server подготовлены:
 
-- bootstrap servers `kafka-1:9092,kafka-2:9092,kafka-3:9092`;
+- bootstrap servers `kafka-1:9092,kafka-2:9094,kafka-3:9096`;
 - producer `acks=all`, `enable.idempotence=true`;
 - consumer `enable-auto-commit=false`, `auto-offset-reset=earliest`;
 - listener `ack-mode=record`, admin `fail-fast=false`.
@@ -91,3 +91,11 @@ docker compose exec kafka-1 /opt/kafka/bin/kafka-topics.sh \
 Итог скрипта: `PASS: six topics, repeated init, leader failover, grouped consume, ISR recovery and volume persistence`.
 
 Проверка выполнена на одном Docker-host и использует остановку контейнера лидера. Отказ физического хоста и одновременная потеря двух брокеров в этом этапе не проверялись. Полный запуск бизнес-сервисов через Compose остается отдельной проверкой этапов 7–8.
+
+## Уточнение этапа 5: восстановление после полного простоя
+
+Используются разные внутренние порты: kafka-1 — broker 9092 / controller 9093, kafka-2 — 9094 / 9095, kafka-3 — 9096 / 9097. Наружу они не публикуются. При `stop/up` Docker может выдать прежний IP одного брокера другому. С одинаковыми портами долгоживущий Kafka-клиент способен принять соединение с другим nodeId и бесконечно получать NOT_LEADER_OR_FOLLOWER/NOT_COORDINATOR, хотя ISR=3. Разные порты исключают успешное подключение к другому брокеру по старому IP: соединение обрывается, Kafka повторяет DNS lookup. Healthcheck использует advertised endpoint своего узла.
+
+Проблема описана в [Apache KAFKA-15828](https://issues.apache.org/jira/browse/KAFKA-15828); не предполагается, что настройка DNS TTL сама исправляет уже открытое неверное соединение. При обновлении старого стенда нужно обновить KAFKA_BOOTSTRAP_SERVERS в `.env` по `.env.example` и применить новую конфигурацию всех брокеров; volumes сохраняются. Smoke проверяет именно stop/start всех брокеров с работающими producer/consumer.
+
+Проверка этапа 5, 06.11.2026: повторный `scripts/kafka-smoke.sh` — PASS с новыми портами (шесть топиков, повторный init, отказ лидера, produce/consume на двух брокерах, возврат ISR=3 и сохранность после пересоздания всех брокеров). `scripts/notifications-smoke.py` — PASS при полном stop/start Kafka без рестарта приложений: pending outbox доставлен, DLT работает. Тестовые проекты и volumes удалены.

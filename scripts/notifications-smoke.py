@@ -17,13 +17,13 @@ ENV = dict(os.environ, BOOTSTRAP_ADMIN_ENABLED="true", BOOTSTRAP_ADMIN_EMAIL="ad
            POSTGRES_PASSWORD="tracker", USER_DB_USERNAME="users", USER_DB_PASSWORD="users",
            NOTIFICATION_DB_USERNAME="notifications", NOTIFICATION_DB_PASSWORD="notifications",
            JWT_ISSUER="http://task-tracker", JWT_AUDIENCE="task-tracker-api",
-           KAFKA_BOOTSTRAP_SERVERS="kafka-1:9092,kafka-2:9092,kafka-3:9092")
+           KAFKA_BOOTSTRAP_SERVERS="kafka-1:9092,kafka-2:9094,kafka-3:9096")
 
 
-def command(args, capture=False, timeout=900):
+def command(args, capture=False, timeout=900, data=None):
     with (LOG_DIR / "commands.log").open("a") as log:
         result = subprocess.run(args, cwd=ROOT, env=ENV, text=True, stdout=subprocess.PIPE if capture else log,
-                                stderr=log, timeout=timeout, check=True)
+                                stderr=log, timeout=timeout, check=True, input=data)
     return result.stdout.strip() if capture else None
 
 
@@ -114,32 +114,67 @@ try:
                            {"taskKey": key, "title": key, "status": "TODO", "priority": "HIGH",
                             "projectId": project["id"], "assigneeId": assignee, "labelIds": []}, 201)[0]
 
+            def notices(token, event_type="TaskAssigned"):
+                return [n for n in api("GET", "/api/v1/notifications", token)[0] if n["type"] == event_type]
+
             def count(token):
-                return int(api("GET", "/api/v1/notifications", token)[1]["X-Total-Count"])
+                return len(notices(token))
+
+            for token in [lead, developer, other]:
+                until(lambda: len(notices(token, "ProjectMemberAdded")) == 1)
+            print("Project membership notifications including automatic lead membership: PASS", flush=True)
 
             api("GET", "/api/v1/notifications", expected=401)
             task = create_task("NOTICE-1", developer_id)
             until(lambda: count(developer) == 1)
-            notice = api("GET", "/api/v1/notifications", developer)[0][0]
+            notice = notices(developer)[0]
             assert notice["resourceId"] == str(task["id"]) and "NOTICE-1" in notice["message"]
             assert count(other) == 0 and count(admin) == 0
             api("PATCH", f"/api/v1/notifications/{notice['id']}/read", other, expected=404)
             api("PATCH", f"/api/v1/notifications/{notice['id']}/read", developer, expected=204)
-            first_read = api("GET", "/api/v1/notifications", developer)[0][0]["readAt"]
+            first_read = notices(developer)[0]["readAt"]
             api("PATCH", f"/api/v1/notifications/{notice['id']}/read", developer, expected=204)
-            assert api("GET", "/api/v1/notifications", developer)[0][0]["readAt"] == first_read
+            assert notices(developer)[0]["readAt"] == first_read
             print("Task -> outbox -> Kafka -> owned notification/read through Gateway: PASS", flush=True)
 
+            task = api("PATCH", f"/api/v1/tasks/{task['id']}/status", developer,
+                       {"status": "IN_PROGRESS", "version": task["version"]})[0]
+            until(lambda: len(notices(lead, "TaskStatusChanged")) == 1)
             body = {key: task[key] for key in ["taskKey", "title", "description", "status", "priority", "projectId", "labelIds", "version"]}
             body["assigneeId"] = other_id
-            api("PUT", f"/api/v1/tasks/{task['id']}", lead, body)
+            body["status"] = "DONE"
+            api("PUT", f"/api/v1/tasks/{task['id']}", admin, body)
+            until(lambda: len(notices(lead, "TaskStatusChanged")) == 2)
+            print("Status changes through PATCH and PUT notify the author: PASS", flush=True)
             until(lambda: count(other) == 1)
             command(compose + ["stop", "notification-service"], timeout=60)
             create_task("NOTICE-2", other_id)
             command(compose + ["up", "-d", "--no-deps", "--wait", "--wait-timeout", "120", "notification-service"], timeout=150)
             until(lambda: count(other) == 2)
             print("Reassignment and consumer restart preserve delivery: PASS", flush=True)
-            print("PASS: JWT, three OpenAPI routes, assignment, ownership, read idempotence and consumer restart", flush=True)
+            command(compose + ["stop", "kafka-1", "kafka-2", "kafka-3"], timeout=90)
+            create_task("NOTICE-3", developer_id)
+
+            def pending_count():
+                value = command(compose + ["exec", "-T", "postgres", "psql", "-U", "tracker", "-d", "tracker", "-At", "-c",
+                    "SELECT count(*) FROM outbox_events WHERE published_at IS NULL"], capture=True, timeout=15)
+                return int(value)
+
+            assert pending_count() >= 1
+            command(compose + ["up", "-d", "--no-deps", "--wait", "--wait-timeout", "180", "kafka-1", "kafka-2", "kafka-3"], timeout=210)
+            until(lambda: count(developer) == 2 and pending_count() == 0)
+            print("Kafka outage leaves a pending outbox row; delivery resumes after recovery: PASS", flush=True)
+
+            poison = '{"eventType":"UnknownSmokeEvent"}'
+            command(compose + ["exec", "-T", "kafka-1", "/opt/kafka/bin/kafka-console-producer.sh", "--bootstrap-server", "kafka-1:9092",
+                    "--topic", "tracker.task.events.v1", "--producer-property", "acks=all"], data=poison+"\n", timeout=30)
+            recovered = command(compose + ["exec", "-T", "kafka-1", "/opt/kafka/bin/kafka-console-consumer.sh", "--bootstrap-server", "kafka-1:9092",
+                    "--topic", "tracker.task.events.v1.dlt", "--from-beginning", "--max-messages", "1", "--timeout-ms", "30000"], capture=True, timeout=40)
+            assert recovered == poison
+            create_task("NOTICE-4", other_id)
+            until(lambda: count(other) == 3)
+            print("Unsupported event reaches replicated DLT; valid events continue: PASS", flush=True)
+            print("PASS: three event types, JWT, ownership/read, consumer restart, Kafka outage and DLT", flush=True)
         finally:
             try:
                 command(compose + ["logs", "--no-color"], timeout=60)

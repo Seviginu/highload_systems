@@ -7,9 +7,11 @@ import itmo.tracker.application.model.Actor;
 import itmo.tracker.application.model.AddProjectMemberCommand;
 import itmo.tracker.application.model.PageQuery;
 import itmo.tracker.application.model.ProjectMemberView;
+import itmo.tracker.application.model.ProjectMembership;
 import itmo.tracker.application.model.ResultPage;
 import itmo.tracker.application.port.in.*;
 import itmo.tracker.application.port.out.ProjectMemberStore;
+import itmo.tracker.application.port.out.ProjectMemberships;
 import itmo.tracker.application.port.out.ProjectStore;
 import itmo.tracker.application.port.out.UnitOfWork;
 import itmo.tracker.application.port.out.UserDirectoryPort;
@@ -23,13 +25,15 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
             ProjectStore projectRepository,
             UserDirectoryPort userDirectory,
             UnitOfWork transactions,
-            ProjectMemberMapper memberMapper) {
+            ProjectMemberMapper memberMapper,
+            ProjectMemberships events) {
         this.access = access;
         this.memberRepository = memberRepository;
         this.projectRepository = projectRepository;
         this.userDirectory = userDirectory;
         this.transactions = transactions;
         this.memberMapper = memberMapper;
+        this.events = events;
     }
 
     private final TrackerAccess access;
@@ -39,6 +43,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     private final UserDirectoryPort userDirectory;
     private final UnitOfWork transactions;
     private final ProjectMemberMapper memberMapper;
+    private final ProjectMemberships events;
 
     @Override
     public ProjectMemberView add(Long projectId, AddProjectMemberCommand request, Actor actor) {
@@ -47,15 +52,15 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         return transactions.write(
                 () -> {
                     access.requireProjectManager(projectId, actor);
-                    return addMember(projectId, request.userId());
+                    return addMember(projectId, request.userId(), actor);
                 });
     }
 
     @Override
-    public ProjectMemberView assignValidatedTeamLead(Long projectId, Long userId) {
+    public ProjectMemberView assignValidatedTeamLead(Long projectId, Long userId, Actor actor) {
         return transactions.write(
                 () -> {
-                    return addMember(projectId, userId);
+                    return addMember(projectId, userId, actor);
                 });
     }
 
@@ -98,7 +103,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
                 });
     }
 
-    private ProjectMemberView addMember(Long projectId, Long userId) {
+    private ProjectMemberView addMember(Long projectId, Long userId, Actor actor) {
         Project project =
                 projectRepository
                         .findById(projectId)
@@ -110,10 +115,22 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
                 throw memberConflict(projectId, userId);
             }
             member.activate();
-            return memberMapper.toResponse(memberRepository.save(member));
+            return saveMember(member, project, actor);
         }
 
-        return memberMapper.toResponse(memberRepository.save(new ProjectMember(project, userId)));
+        return saveMember(new ProjectMember(project, userId), project, actor);
+    }
+
+    private ProjectMemberView saveMember(ProjectMember member, Project project, Actor actor) {
+        ProjectMember saved = memberRepository.save(member);
+        events.append(
+                new ProjectMembership(
+                        project.getId(),
+                        saved.getId(),
+                        project.getName(),
+                        actor.id(),
+                        saved.getUserId()));
+        return memberMapper.toResponse(saved);
     }
 
     private void ensureProjectExists(Long projectId) {

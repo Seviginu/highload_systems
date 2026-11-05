@@ -13,6 +13,7 @@ import itmo.tracker.application.model.ResultSlice;
 import itmo.tracker.application.model.TaskAssignment;
 import itmo.tracker.application.model.TaskFeedView;
 import itmo.tracker.application.model.TaskFilter;
+import itmo.tracker.application.model.TaskStatusChange;
 import itmo.tracker.application.model.TaskView;
 import itmo.tracker.application.model.UpdateTaskCommand;
 import itmo.tracker.application.port.in.*;
@@ -20,12 +21,14 @@ import itmo.tracker.application.port.in.LabelService;
 import itmo.tracker.application.port.in.ProjectMemberService;
 import itmo.tracker.application.port.in.ProjectService;
 import itmo.tracker.application.port.out.TaskAssignments;
+import itmo.tracker.application.port.out.TaskStatusChanges;
 import itmo.tracker.application.port.out.TaskStore;
 import itmo.tracker.application.port.out.UnitOfWork;
 import itmo.tracker.application.port.out.UserDirectoryPort;
 import itmo.tracker.domain.Label;
 import itmo.tracker.domain.Project;
 import itmo.tracker.domain.Task;
+import itmo.tracker.domain.TaskStatus;
 
 import java.util.Objects;
 import java.util.Set;
@@ -40,7 +43,8 @@ public class TaskServiceImpl implements TaskService {
             UserDirectoryPort userDirectory,
             UnitOfWork transactions,
             LabelService labelService,
-            TaskAssignments assignments) {
+            TaskAssignments assignments,
+            TaskStatusChanges statusChanges) {
         this.access = access;
         this.taskRepository = taskRepository;
         this.taskMapper = taskMapper;
@@ -50,6 +54,7 @@ public class TaskServiceImpl implements TaskService {
         this.transactions = transactions;
         this.labelService = labelService;
         this.assignments = assignments;
+        this.statusChanges = statusChanges;
     }
 
     private final TrackerAccess access;
@@ -62,6 +67,7 @@ public class TaskServiceImpl implements TaskService {
     private final UnitOfWork transactions;
     private final LabelService labelService;
     private final TaskAssignments assignments;
+    private final TaskStatusChanges statusChanges;
 
     @Override
     public TaskView create(CreateTaskCommand request, Actor actor) {
@@ -193,10 +199,12 @@ public class TaskServiceImpl implements TaskService {
                     requireAssigneeMember(request.projectId(), assignee);
                     Set<Label> labels = resolveLabels(request.labelIds());
                     Long previousAssignee = task.getAssigneeId();
+                    TaskStatus previousStatus = task.getStatus();
                     taskMapper.updateDomain(task, request, author, assignee, project, labels);
 
                     Task saved = taskRepository.save(task);
                     appendAssignment(saved, previousAssignee, actor);
+                    appendStatusChange(saved, previousStatus, actor);
                     return taskMapper.toResponse(saved);
                 });
     }
@@ -223,10 +231,27 @@ public class TaskServiceImpl implements TaskService {
                     if (!Objects.equals(task.getVersion(), request.version())) {
                         throw versionConflict(id);
                     }
+                    TaskStatus previousStatus = task.getStatus();
                     task.changeStatus(request.status());
 
-                    return taskMapper.toResponse(taskRepository.saveStatus(task));
+                    Task saved = taskRepository.saveStatus(task);
+                    appendStatusChange(saved, previousStatus, actor);
+                    return taskMapper.toResponse(saved);
                 });
+    }
+
+    private void appendStatusChange(Task task, TaskStatus previousStatus, Actor actor) {
+        if (task.getStatus() != previousStatus && task.getAuthorId() != actor.id()) {
+            statusChanges.append(
+                    new TaskStatusChange(
+                            task.getId(),
+                            task.getVersion(),
+                            task.getTaskKey(),
+                            actor.id(),
+                            task.getAuthorId(),
+                            previousStatus.name(),
+                            task.getStatus().name()));
+        }
     }
 
     private void appendAssignment(Task task, Long previousAssignee, Actor actor) {

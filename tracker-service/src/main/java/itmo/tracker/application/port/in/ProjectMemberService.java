@@ -11,7 +11,7 @@ public interface ProjectMemberService {
     ProjectMemberView add(Long projectId, AddProjectMemberCommand request, Actor actor);
 
     @SuppressWarnings("UnusedReturnValue")
-    ProjectMemberView assignValidatedTeamLead(Long projectId, Long userId);
+    ProjectMemberView assignValidatedTeamLead(Long projectId, Long userId, Actor actor);
 
     ResultPage<ProjectMemberView> findAll(Long projectId, PageQuery pageable);
 

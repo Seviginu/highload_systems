@@ -74,7 +74,9 @@ class TaskServiceImplTest {
                         new TestTransactions(),
                         labelService,
                         org.mockito.Mockito.mock(
-                                itmo.tracker.application.port.out.TaskAssignments.class));
+                                itmo.tracker.application.port.out.TaskAssignments.class),
+                        org.mockito.Mockito.mock(
+                                itmo.tracker.application.port.out.TaskStatusChanges.class));
         project = new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE);
         author = new TestUser("TEAM_LEAD");
         label = new Label("Backend", "#112233");

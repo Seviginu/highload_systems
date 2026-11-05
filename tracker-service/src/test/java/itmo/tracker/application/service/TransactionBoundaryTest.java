@@ -58,7 +58,7 @@ class TransactionBoundaryTest {
                                     null,
                                     null);
                         });
-        when(members.assignValidatedTeamLead(1L, 2L))
+        when(members.assignValidatedTeamLead(1L, 2L, itmo.support.TestActors.admin()))
                 .thenAnswer(
                         call -> {
                             assertThat(active.get()).isTrue();
@@ -79,7 +79,7 @@ class TransactionBoundaryTest {
         order.verify(users).requireTeamLead(2L);
         order.verify(projects).existsByCode("PLATFORM");
         order.verify(projects).save(any());
-        order.verify(members).assignValidatedTeamLead(1L, 2L);
+        order.verify(members).assignValidatedTeamLead(1L, 2L, itmo.support.TestActors.admin());
         assertThat(active.get()).isFalse();
     }
 }
