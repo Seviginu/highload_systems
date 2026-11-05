@@ -27,7 +27,7 @@ public class BlockingOperations {
     }
 
     public Mono<Void> run(Runnable operation) {
-        return this.<Void>call(() -> {
+        return this.call(() -> {
             operation.run();
             return null;
         });
