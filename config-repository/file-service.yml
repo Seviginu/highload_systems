@@ -1,0 +1,32 @@
+server:
+  port: ${SERVER_PORT:8084}
+spring:
+  datasource:
+    url: ${FILE_DB_URL:jdbc:postgresql://localhost:55435/files}
+    username: ${FILE_DB_USERNAME:files}
+    password: ${FILE_DB_PASSWORD:files}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  kafka:
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+  webflux:
+    multipart:
+      max-in-memory-size: 64KB
+      max-headers-size: 8KB
+      max-disk-usage-per-part: ${app.files.max-file-bytes:10485760}B
+      max-parts: 1
+app:
+  files:
+    max-file-bytes: ${FILE_MAX_BYTES:10485760}

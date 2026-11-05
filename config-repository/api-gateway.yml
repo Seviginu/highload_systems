@@ -9,6 +9,16 @@ spring:
           default-filters:
             - PreserveHostHeader
           routes:
+            - id: files-api
+              uri: lb://file-service
+              predicates:
+                - Path=/api/v1/files/**
+            - id: files-openapi
+              uri: lb://file-service
+              predicates:
+                - Path=/v3/api-docs/file-service
+              filters:
+                - SetPath=/v3/api-docs
             - id: notifications-api
               uri: lb://notification-service
               predicates:
@@ -50,3 +60,9 @@ springdoc:
         url: /v3/api-docs/tracker-service
       - name: notification-service
         url: /v3/api-docs/notification-service
+      - name: file-service
+        url: /v3/api-docs/file-service
+
+app:
+  files:
+    max-file-bytes: ${FILE_MAX_BYTES:10485760}

@@ -32,7 +32,7 @@ fi
 docker compose up -d --wait --wait-timeout "${STARTUP_TIMEOUT_SECONDS:-180}" \
     api-gateway pgadmin redisinsight kafka-1 kafka-2 kafka-3
 swagger_deadline=$((SECONDS + ${STARTUP_TIMEOUT_SECONDS:-180}))
-for service in user-service tracker-service notification-service; do
+for service in user-service tracker-service notification-service file-service; do
     until curl --fail --silent --max-time 5 --output /dev/null \
             "http://localhost:${GATEWAY_PORT}/v3/api-docs/${service}"; do
         if (( SECONDS >= swagger_deadline )); then

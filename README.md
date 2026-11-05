@@ -1,6 +1,6 @@
 # Task tracker — лабораторные работы по JVM
 
-Java 21, Maven, Spring Boot. После этапа 5 ЛР4 проект состоит из `user-service` (WebFlux/R2DBC), `tracker-service` и `notification-service` (WebFlux/JPA), Gateway, Eureka и Config Server. PostgreSQL, Redis и три брокера Kafka запускаются через Docker Compose.
+Java 21, Maven, Spring Boot. После этапа 6 ЛР4 проект состоит из `user-service` (WebFlux/R2DBC), `tracker-service`, `notification-service` и `file-service` (WebFlux/JPA), Gateway, Eureka и Config Server. PostgreSQL, Redis и три брокера Kafka запускаются через Docker Compose.
 
 [Соответствие требованиям ЛР1–3, результаты проверки и сценарий сдачи](docs/LAB3_HANDOFF.md).
 
@@ -12,7 +12,9 @@ Java 21, Maven, Spring Boot. После этапа 5 ЛР4 проект сост
 
 Этап 3 добавляет Kafka-кластер из трех брокеров KRaft и шесть реплицированных топиков. [Конфигурация, запуск и результаты проверки](docs/LAB4_KAFKA.md). Изолированная проверка отказа лидера и сохранности данных: `./scripts/kafka-smoke.sh`. С этапов 4–5 трекер публикует TaskAssigned, TaskStatusChanged и ProjectMemberAdded для сервиса уведомлений; настроены повторы, DLT и очистка опубликованного outbox. [Правила событий и проверки](docs/LAB4_NOTIFICATIONS.md).
 
-Этап 4 добавляет `notification-service` и события назначения задач через транзакционный outbox/Kafka. [API, надежность и проверка](docs/LAB4_NOTIFICATIONS.md). Общий Swagger содержит три сервиса. Сквозная проверка в отдельном Docker-стенде: `python3 scripts/notifications-smoke.py`.
+Этап 4 добавляет `notification-service` и события назначения задач через транзакционный outbox/Kafka. [API, надежность и проверка](docs/LAB4_NOTIFICATIONS.md). Общий Swagger содержит четыре сервиса. Сквозная проверка в отдельном Docker-стенде: `python3 scripts/notifications-smoke.py`.
+
+Этап 6 добавляет `file-service`: загрузка/метаданные/скачивание, bytea в отдельной БД, владелец или ADMIN, лимит 10 MiB и FileUploaded через outbox/Kafka. [API, лимиты и проверки файлов](docs/LAB4_FILES.md). FILE_MAX_BYTES задает одинаковый лимит в Gateway и file-service.
 
 ## Пароли и bootstrap
 
@@ -37,9 +39,9 @@ BOOTSTRAP_ADMIN_PASSWORD=<ваш пароль>
 ./scripts/docker-up.sh
 ```
 
-Скрипт создает локальную RSA-пару в `.local/jwt`, сохраняя существующий приватный ключ. Приватный ключ монтируется только в user-service, публичный — также в Gateway и tracker-service. Параметры issuer, audience и TTL задаются окружением. Каталог `.local` исключен из git и Docker build context.
+Скрипт создает локальную RSA-пару в `.local/jwt`, сохраняя существующий приватный ключ. Приватный ключ монтируется только в user-service, публичный — также в Gateway, tracker-service, notification-service и file-service. Параметры issuer, audience и TTL задаются окружением. Каталог `.local` исключен из git и Docker build context.
 
-Скрипт использует `GATEWAY_PORT=58081` по умолчанию: общий Swagger — `http://localhost:58081/swagger-ui/index.html`. Он ожидает healthy-состояние сервисов и доступность трех OpenAPI-схем через Gateway; таймаут задается `STARTUP_TIMEOUT_SECONDS` (по умолчанию 180 секунд). При запуске непосредственно через `docker compose up --build -d` без переопределений используется порт 8081; перед первым запуском выполнить `bash scripts/generate-jwt-keys.sh`.
+Скрипт использует `GATEWAY_PORT=58081` по умолчанию: общий Swagger — `http://localhost:58081/swagger-ui/index.html`. Он ожидает healthy-состояние сервисов и доступность четырех OpenAPI-схем через Gateway; таймаут задается `STARTUP_TIMEOUT_SECONDS` (по умолчанию 180 секунд). При запуске непосредственно через `docker compose up --build -d` без переопределений используется порт 8081; перед первым запуском выполнить `bash scripts/generate-jwt-keys.sh`.
 
 ## Вход и доступ
 
