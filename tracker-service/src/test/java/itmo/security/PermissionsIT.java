@@ -64,6 +64,7 @@ class PermissionsIT {
     @BeforeEach
     void prepare() {
         cache.getCache("tasks").clear();
+        jdbc.update("DELETE FROM outbox_events");
         jdbc.update("DELETE FROM task_labels");
         jdbc.update("DELETE FROM tasks");
         jdbc.update("DELETE FROM project_members");
@@ -229,6 +230,117 @@ class PermissionsIT {
                 .usingRecursiveComparison().isEqualTo(original);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM task_labels WHERE task_id = ?", Long.class, original.id()))
                 .isEqualTo(1L);
+    }
+
+    @Test
+    void shouldStoreAssignmentAndTaskInOneTransaction() throws Exception {
+        TaskResponse task = task();
+        var row = jdbc.queryForMap("SELECT * FROM outbox_events");
+        var event =
+                new com.fasterxml.jackson.databind.ObjectMapper()
+                        .findAndRegisterModules()
+                        .readTree(row.get("payload").toString());
+        assertThat(event.get("eventType").asText()).isEqualTo("TaskAssigned");
+        assertThat(event.get("aggregateId").asLong()).isEqualTo(task.id());
+        assertThat(event.get("aggregateVersion").asLong()).isEqualTo(task.version());
+        assertThat(event.get("recipientIds").get(0).asLong()).isEqualTo(developer.getId());
+        assertThat(event.toString()).doesNotContain("password", "Authorization", "Bearer");
+        assertThat(row.get("published_at")).isNull();
+    }
+
+    @Test
+    void shouldEmitOnlyForRealAssignmentsOnUpdateAndMove() {
+        TaskResponse task = task();
+        var body = taskBody();
+        body.put("version", task.version());
+        task =
+                admin().put()
+                        .uri("/api/v1/tasks/{id}", task.id())
+                        .bodyValue(body)
+                        .exchange()
+                        .expectStatus()
+                        .isOk()
+                        .expectBody(TaskResponse.class)
+                        .returnResult()
+                        .getResponseBody();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events", Long.class))
+                .isEqualTo(1L);
+        body.put("assigneeId", other.getId());
+        body.put("version", task.version());
+        task =
+                admin().put()
+                        .uri("/api/v1/tasks/{id}", task.id())
+                        .bodyValue(body)
+                        .exchange()
+                        .expectStatus()
+                        .isOk()
+                        .expectBody(TaskResponse.class)
+                        .returnResult()
+                        .getResponseBody();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events", Long.class))
+                .isEqualTo(2L);
+        body.put("assigneeId", null);
+        body.put("version", task.version());
+        task =
+                admin().put()
+                        .uri("/api/v1/tasks/{id}", task.id())
+                        .bodyValue(body)
+                        .exchange()
+                        .expectStatus()
+                        .isOk()
+                        .expectBody(TaskResponse.class)
+                        .returnResult()
+                        .getResponseBody();
+        body.put("assigneeId", lead.getId());
+        body.put("version", task.version());
+        task =
+                as(lead).put()
+                        .uri("/api/v1/tasks/{id}", task.id())
+                        .bodyValue(body)
+                        .exchange()
+                        .expectStatus()
+                        .isOk()
+                        .expectBody(TaskResponse.class)
+                        .returnResult()
+                        .getResponseBody();
+        // Assigning to the actor is intentionally quiet.
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events", Long.class))
+                .isEqualTo(2L);
+        admin().post()
+                .uri("/api/v1/tasks/{id}/move", task.id())
+                .bodyValue(
+                        Map.of(
+                                "projectId",
+                                target.getId(),
+                                "assigneeId",
+                                outsider.getId(),
+                                "labelIds",
+                                Set.of(),
+                                "version",
+                                task.version()))
+                .exchange()
+                .expectStatus()
+                .isOk();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events", Long.class))
+                .isEqualTo(3L);
+    }
+
+    @Test
+    void shouldRollbackTaskWhenOutboxInsertFails() {
+        jdbc.execute("ALTER TABLE outbox_events ADD CONSTRAINT test_outbox_failure CHECK(false)");
+        try {
+            admin().post()
+                    .uri("/api/v1/tasks")
+                    .bodyValue(taskBody())
+                    .exchange()
+                    .expectStatus()
+                    .is5xxServerError();
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM tasks", Long.class)).isZero();
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events", Long.class))
+                    .isZero();
+        } finally {
+            jdbc.execute("ALTER TABLE outbox_events DROP CONSTRAINT test_outbox_failure");
+        }
     }
 
     private TaskResponse task() {

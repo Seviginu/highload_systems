@@ -1,6 +1,6 @@
 # Task tracker — лабораторные работы по JVM
 
-Java 21, Maven, Spring Boot. После ЛР2 проект состоит из `user-service` (WebFlux/R2DBC), `tracker-service` (WebFlux/JPA), Gateway, Eureka и Config Server. PostgreSQL и Redis запускаются через Docker Compose.
+Java 21, Maven, Spring Boot. После этапа 4 ЛР4 проект состоит из `user-service` (WebFlux/R2DBC), `tracker-service` и `notification-service` (WebFlux/JPA), Gateway, Eureka и Config Server. PostgreSQL, Redis и три брокера Kafka запускаются через Docker Compose.
 
 [Соответствие требованиям ЛР1–3, результаты проверки и сценарий сдачи](docs/LAB3_HANDOFF.md).
 
@@ -10,7 +10,9 @@ Java 21, Maven, Spring Boot. После ЛР2 проект состоит из `
 
 После этапа 2 `tracker-service` использует те же слои в `itmo.tracker`. Сценарии работают с доменными моделями и портами `TaskStore`, `ProjectStore`, `ProjectMemberStore`, `LabelStore`, `UserDirectoryPort`, `UnitOfWork`. JPA-модели и связи находятся в persistence-адаптере; команды/результаты отделены от REST DTO. `SpringUnitOfWork` обеспечивает локальные транзакции, `CachedTaskService` — кэш. Данные `Actor` передаются из проверенного JWT в бизнес-логику, а JWT для Feign остается во внешнем Security Context. ArchUnit запрещает framework-зависимости domain/application и обратные зависимости адаптеров.
 
-Этап 3 добавляет Kafka-кластер из трех брокеров KRaft и шесть реплицированных топиков. [Конфигурация, запуск и результаты проверки](docs/LAB4_KAFKA.md). Изолированная проверка отказа лидера и сохранности данных: `./scripts/kafka-smoke.sh`. Публикация бизнес-событий начинается с этапа 4.
+Этап 3 добавляет Kafka-кластер из трех брокеров KRaft и шесть реплицированных топиков. [Конфигурация, запуск и результаты проверки](docs/LAB4_KAFKA.md). Изолированная проверка отказа лидера и сохранности данных: `./scripts/kafka-smoke.sh`. С этапа 4 трекер публикует TaskAssigned для сервиса уведомлений.
+
+Этап 4 добавляет `notification-service` и события назначения задач через транзакционный outbox/Kafka. [API, надежность и проверка](docs/LAB4_NOTIFICATIONS.md). Общий Swagger содержит три сервиса. Сквозная проверка в отдельном Docker-стенде: `python3 scripts/notifications-smoke.py`.
 
 ## Пароли и bootstrap
 
@@ -37,12 +39,12 @@ BOOTSTRAP_ADMIN_PASSWORD=<ваш пароль>
 
 Скрипт создает локальную RSA-пару в `.local/jwt`, сохраняя существующий приватный ключ. Приватный ключ монтируется только в user-service, публичный — также в Gateway и tracker-service. Параметры issuer, audience и TTL задаются окружением. Каталог `.local` исключен из git и Docker build context.
 
-Скрипт использует `GATEWAY_PORT=58081` по умолчанию: общий Swagger — `http://localhost:58081/swagger-ui/index.html`. Он ожидает healthy-состояние сервисов и доступность обеих OpenAPI-схем через Gateway; таймаут задается `STARTUP_TIMEOUT_SECONDS` (по умолчанию 180 секунд). При запуске непосредственно через `docker compose up --build -d` без переопределений используется порт 8081; перед первым запуском выполнить `bash scripts/generate-jwt-keys.sh`.
+Скрипт использует `GATEWAY_PORT=58081` по умолчанию: общий Swagger — `http://localhost:58081/swagger-ui/index.html`. Он ожидает healthy-состояние сервисов и доступность трех OpenAPI-схем через Gateway; таймаут задается `STARTUP_TIMEOUT_SECONDS` (по умолчанию 180 секунд). При запуске непосредственно через `docker compose up --build -d` без переопределений используется порт 8081; перед первым запуском выполнить `bash scripts/generate-jwt-keys.sh`.
 
 ## Вход и доступ
 
 1. Выполнить `POST /api/v1/auth/login` с email и паролем супервайзера. Получить `accessToken`, `tokenType=Bearer` и `expiresIn` в секундах.
-2. Передавать токен в `Authorization: Bearer <accessToken>`. В Swagger нажать Authorize и вставить JWT без префикса Bearer. Общий Swagger содержит документацию обоих сервисов.
+2. Передавать токен в `Authorization: Bearer <accessToken>`. В Swagger нажать Authorize и вставить JWT без префикса Bearer. Общий Swagger содержит документацию трех сервисов.
 3. `GET /api/v1/auth/me` возвращает актуальный профиль текущего пользователя.
 4. Только ADMIN может создавать, читать, изменять и удалять пользователей и назначать роли. Для назначения или изменения пароля существующего пользователя использовать `PUT /api/v1/users/{id}/password` с телом `{"password":"новый пароль"}`; успешный ответ — 204.
 

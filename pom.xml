@@ -30,11 +30,13 @@
 
     <modules>
         <module>security-common</module>
+        <module>event-contracts</module>
         <module>config-server</module>
         <module>discovery-server</module>
         <module>user-service</module>
         <module>tracker-service</module>
         <module>api-gateway</module>
+        <module>notification-service</module>
     </modules>
 
     <dependencyManagement>

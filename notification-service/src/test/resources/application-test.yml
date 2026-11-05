@@ -1,0 +1,17 @@
+spring:
+  config:
+    import:
+      - classpath:config-repository/application.yml
+      - classpath:config-repository/notification-service.yml
+  cloud:
+    config:
+      enabled: false
+eureka:
+  client:
+    enabled: false
+---
+app:
+  jwt:
+    public-key: classpath:keys/test-public.pem
+    issuer: http://task-tracker
+    audience: task-tracker-api

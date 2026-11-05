@@ -170,6 +170,54 @@ services:
       retries: 20
     restart: unless-stopped
 
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_MODULE: notification-service
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+      NOTIFICATION_DB_URL: jdbc:postgresql://notifications-db:5432/notifications
+      NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:-notifications}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-notifications}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka-1:9092,kafka-2:9092,kafka-3:9092}
+      JWT_ISSUER: ${JWT_ISSUER:-http://task-tracker}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-task-tracker-api}
+      SERVER_PORT: 8080
+    volumes:
+      - ./.local/jwt/public.pem:/app/keys/public.pem:ro
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      notifications-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q '\"status\":\"UP\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+
+  notifications-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: notifications
+      POSTGRES_USER: ${NOTIFICATION_DB_USERNAME:-notifications}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-notifications}
+    volumes:
+      - notifications-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   api-gateway:
     build:
       context: .
@@ -194,6 +242,8 @@ services:
       app:
         condition: service_healthy
       user-service:
+        condition: service_healthy
+      notification-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q '\"status\":\"UP\"'"]
@@ -323,6 +373,7 @@ volumes:
   pgadmin-data:
   redisinsight-data:
   users-data:
+  notifications-data:
   postgres-data:
   redis-data:
 
