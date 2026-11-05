@@ -1,6 +1,6 @@
 # Task tracker — лабораторные работы по JVM
 
-Java 21, Maven, Spring Boot. После этапа 6 ЛР4 проект состоит из `user-service` (WebFlux/R2DBC), `tracker-service`, `notification-service` и `file-service` (WebFlux/JPA), Gateway, Eureka и Config Server. PostgreSQL, Redis и три брокера Kafka запускаются через Docker Compose.
+Java 21, Maven, Spring Boot. После этапа 7 ЛР4 проект состоит из `user-service` (WebFlux/R2DBC), `tracker-service`, `notification-service` и `file-service` (WebFlux/JPA), Gateway, Eureka и Config Server. PostgreSQL, Redis и три брокера Kafka запускаются через Docker Compose.
 
 [Соответствие требованиям ЛР1–3, результаты проверки и сценарий сдачи](docs/LAB3_HANDOFF.md).
 
@@ -39,14 +39,16 @@ BOOTSTRAP_ADMIN_PASSWORD=<ваш пароль>
 ./scripts/docker-up.sh
 ```
 
-Скрипт создает локальную RSA-пару в `.local/jwt`, сохраняя существующий приватный ключ. Приватный ключ монтируется только в user-service, публичный — также в Gateway, tracker-service, notification-service и file-service. Параметры issuer, audience и TTL задаются окружением. Каталог `.local` исключен из git и Docker build context.
+Скрипт создает локальную RSA-пару в `JWT_KEY_DIR` (по умолчанию `.local/jwt`), сохраняя существующий приватный ключ. Приватный ключ монтируется только в user-service, публичный — также в Gateway, tracker-service, notification-service и file-service. Параметры issuer, audience и TTL задаются окружением. Каталог `.local` исключен из git и Docker build context.
 
-Скрипт использует `GATEWAY_PORT=58081` по умолчанию: общий Swagger — `http://localhost:58081/swagger-ui/index.html`. Он ожидает healthy-состояние сервисов и доступность четырех OpenAPI-схем через Gateway; таймаут задается `STARTUP_TIMEOUT_SECONDS` (по умолчанию 180 секунд). При запуске непосредственно через `docker compose up --build -d` без переопределений используется порт 8081; перед первым запуском выполнить `bash scripts/generate-jwt-keys.sh`.
+Startup и обычный Compose используют одинаковые настройки: окружение shell имеет приоритет над `--env-file`/`.env`, затем применяются defaults из Compose. Скрипт не задает bootstrap-пароль и не включает bootstrap сам. По умолчанию `GATEWAY_PORT=8081`, Swagger — `http://localhost:8081/swagger-ui/index.html`; можно сохранить прежний порт через `GATEWAY_PORT=58081 ./scripts/docker-up.sh`. Скрипт печатает фактический адрес Swagger, ожидает успешный kafka-init, healthy-состояние долгоживущих сервисов, страницу Swagger, selector и четыре схемы. `STARTUP_TIMEOUT_SECONDS` задается также в `.env` (по умолчанию 180 секунд для каждой фазы ожидания, сборка образов отдельно).
+
+Аргументы Compose передаются скрипту: `./scripts/docker-up.sh --env-file ./my.env -p lab4`. Для прямого запуска `docker compose up --build -d` ключи нужно предварительно создать в том же JWT_KEY_DIR. [Общая интеграция, сервисы и проверка полного старта](docs/LAB4_INTEGRATION.md).
 
 ## Вход и доступ
 
 1. Выполнить `POST /api/v1/auth/login` с email и паролем супервайзера. Получить `accessToken`, `tokenType=Bearer` и `expiresIn` в секундах.
-2. Передавать токен в `Authorization: Bearer <accessToken>`. В Swagger нажать Authorize и вставить JWT без префикса Bearer. Общий Swagger содержит документацию трех сервисов.
+2. Передавать токен в `Authorization: Bearer <accessToken>`. В Swagger нажать Authorize и вставить JWT без префикса Bearer. Общий Swagger содержит документацию четырех сервисов.
 3. `GET /api/v1/auth/me` возвращает актуальный профиль текущего пользователя.
 4. Только ADMIN может создавать, читать, изменять и удалять пользователей и назначать роли. Для назначения или изменения пароля существующего пользователя использовать `PUT /api/v1/users/{id}/password` с телом `{"password":"новый пароль"}`; успешный ответ — 204.
 

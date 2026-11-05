@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build and test the notification and file flows in an isolated, automatically removed Compose project."""
+"""Run the real startup script and integrated flows in an isolated, automatically removed Compose project."""
 import json
 import os
 from pathlib import Path
 import subprocess
+import socket
 import tempfile
 import time
 import uuid
@@ -11,8 +12,8 @@ import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
-PROJECT = f"lab4-notifications-smoke-{int(time.time())}-{os.getpid()}"
-LOG_DIR = Path(tempfile.mkdtemp(prefix="lab4-notifications-smoke-"))
+PROJECT = f"lab4-integration-smoke-{int(time.time())}-{os.getpid()}"
+LOG_DIR = Path(tempfile.mkdtemp(prefix="lab4-integration-smoke-"))
 ENV = dict(os.environ, BOOTSTRAP_ADMIN_ENABLED="true", BOOTSTRAP_ADMIN_EMAIL="admin@example.invalid",
            BOOTSTRAP_ADMIN_PASSWORD="Smoke-password-123!", POSTGRES_DB="tracker", POSTGRES_USER="tracker",
            POSTGRES_PASSWORD="tracker", USER_DB_USERNAME="users", USER_DB_PASSWORD="users",
@@ -35,7 +36,7 @@ def until(action, timeout=120):
         try:
             if action():
                 return
-        except (AssertionError, urllib.error.URLError, TimeoutError):
+        except (AssertionError, urllib.error.URLError, TimeoutError, socket.timeout, ConnectionError):
             pass
         time.sleep(1)
     raise AssertionError("Timed out waiting for the notification flow; see smoke logs")
@@ -45,34 +46,33 @@ print(f"Isolated project: {PROJECT}", flush=True)
 try:
     with tempfile.TemporaryDirectory(prefix="lab4-notification-keys-") as keys:
         keys = Path(keys)
-        command(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(keys / "private.pem")])
-        command(["openssl", "pkey", "-in", str(keys / "private.pem"), "-pubout", "-out", str(keys / "public.pem")])
-        # Test keys only. Allow the unprivileged container user to read the bind mount.
-        (keys / "private.pem").chmod(0o644)
+        # Supply bootstrap/keys only through --env-file, exercising real Compose precedence.
+        env_file = keys / "smoke.env"
+        env_file.write_text(f"JWT_KEY_DIR={keys}/jwt\nSTARTUP_TIMEOUT_SECONDS=300\n"
+                            "BOOTSTRAP_ADMIN_ENABLED=true\nBOOTSTRAP_ADMIN_NAME=IntegrationAdmin\n"
+                            "BOOTSTRAP_ADMIN_EMAIL=admin@example.invalid\nBOOTSTRAP_ADMIN_PASSWORD=Smoke-password-123!\n")
+        for name in ["JWT_KEY_DIR", "STARTUP_TIMEOUT_SECONDS", "BOOTSTRAP_ADMIN_ENABLED", "BOOTSTRAP_ADMIN_NAME",
+                     "BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD", "COMPOSE_PROJECT_NAME", "COMPOSE_FILE", "COMPOSE_PROFILES", "COMPOSE_ENV_FILES"]:
+            ENV.pop(name, None)
         override = keys / "compose.yml"
         text = "services:\n"
         for service, port in [("app", None), ("user-service", None), ("config-server", None),
-                              ("discovery-server", None), ("postgres", None), ("redis", None), ("api-gateway", 8080)]:
+                              ("discovery-server", None), ("postgres", None), ("redis", None), ("api-gateway", 8080), ("pgadmin", 80), ("redisinsight", 5540)]:
             text += f"  {service}:\n    ports: " + ("!reset []\n" if port is None else f"!override ['127.0.0.1::{port}']\n")
-        for service in ["app", "api-gateway", "user-service", "notification-service", "file-service"]:
-            # Merge repeated service keys by appending volumes to the existing section where necessary.
-            target = f"  {service}:\n"
-            volumes = f"    volumes:\n      - {keys}/public.pem:/app/keys/public.pem:ro\n"
-            if service == "user-service":
-                volumes += f"      - {keys}/private.pem:/app/keys/private.pem:ro\n"
-            if target in text:
-                text = text.replace(target, target + volumes, 1)
-            else:
-                text += target + volumes
         override.write_text(text)
-        compose = ["docker", "compose", "--env-file", "/dev/null", "-p", PROJECT,
+        compose = ["docker", "compose", "--env-file", str(env_file), "-p", PROJECT,
                    "-f", str(ROOT / "docker-compose.yml"), "-f", str(override)]
         try:
-            command(compose + ["up", "--build", "-d", "api-gateway", "redis",
-                               "kafka-1", "kafka-2", "kafka-3", "kafka-init"])
-            init_id = command(compose + ["ps", "-aq", "kafka-init"], capture=True)
-            assert command(["docker", "wait", init_id], capture=True, timeout=180) == "0"
-            command(compose + ["up", "-d", "--wait", "--wait-timeout", "300", "api-gateway", "redis", "kafka-1", "kafka-2", "kafka-3"], timeout=360)
+            startup = ["bash", "scripts/docker-up.sh", *compose[2:]]
+            command(startup)
+            private_key = (keys / "jwt/private.pem").read_bytes()
+            # Repeated startup must honor disabling bootstrap and retain the signing key/data.
+            env_file.write_text(env_file.read_text().replace("BOOTSTRAP_ADMIN_ENABLED=true", "BOOTSTRAP_ADMIN_ENABLED=false"))
+            command(startup)
+            assert (keys / "jwt/private.pem").read_bytes() == private_key
+            enabled = command(compose + ["exec", "-T", "user-service", "printenv", "BOOTSTRAP_ADMIN_ENABLED"], capture=True)
+            assert enabled == "false"
+            print("Real startup twice: env-file, generated/preserved key and disabled bootstrap: PASS", flush=True)
             address = command(compose + ["port", "api-gateway", "8080"], capture=True)
             base = "http://" + address
 
@@ -93,7 +93,44 @@ try:
 
             for service in ["user-service", "tracker-service", "notification-service", "file-service"]:
                 until(lambda: api("GET", f"/v3/api-docs/{service}")[0].get("openapi"))
-            print("All four OpenAPI routes are available through Gateway", flush=True)
+            configuration = api("GET", "/v3/api-docs/swagger-config")[0]
+            expected_services = {"user-service", "tracker-service", "notification-service", "file-service"}
+            assert {(e["name"], e["url"]) for e in configuration["urls"]} == {(n, "/v3/api-docs/" + n) for n in expected_services}
+            for name in expected_services:
+                spec = api("GET", "/v3/api-docs/" + name)[0]
+                assert spec["components"]["securitySchemes"]["bearerAuth"]["scheme"] == "bearer"
+                assert spec["paths"] and spec["servers"][0]["url"] == "/"
+            for service, port in [("api-gateway", 8080), ("pgadmin", 80), ("redisinsight", 5540)]:
+                ui_base = "http://" + command(compose + ["port", service, str(port)], capture=True)
+                path = "/swagger-ui/index.html" if service == "api-gateway" else "/"
+                def ui_ready():
+                    with urllib.request.urlopen(ui_base + path, timeout=8) as response:
+                        return response.status == 200
+                until(ui_ready)
+            hosts = json.loads(command(compose + ["exec", "-T", "pgadmin", "/venv/bin/python3", "-c",
+                "import json; print(json.dumps(sorted(s['Host'] for s in json.load(open('/pgadmin4/servers.json'))['Servers'].values())))"], capture=True))
+            assert set(hosts) == {"postgres", "users-db", "notifications-db", "files-db"}
+            print("Swagger selector/four secured schemas, both UIs and four pgAdmin presets: PASS", flush=True)
+
+            def registrations_ready():
+                payload = command(compose + ["exec", "-T", "discovery-server", "wget", "-qO-", "--header=Accept: application/json", "http://localhost:8761/eureka/apps"], capture=True, timeout=15)
+                applications = json.loads(payload)["applications"].get("application", [])
+                entries = {app["name"]: app["instance"] for app in applications}
+                expected = {s.upper() for s in expected_services | {"api-gateway", "config-server"}}
+                assert expected <= entries.keys()
+                for name in expected:
+                    instances = entries[name] if isinstance(entries[name], list) else [entries[name]]
+                    assert len([instance for instance in instances if instance["status"] == "UP"]) == 1
+                return True
+            until(registrations_ready)
+            for name in expected_services | {"api-gateway"}:
+                payload = command(compose + ["exec", "-T", "config-server", "wget", "-qO-", f"http://localhost:8888/{name}/default"], capture=True, timeout=15)
+                configuration = json.loads(payload)
+                assert configuration["name"] == name
+                sources = [source["name"] for source in configuration["propertySources"]]
+                assert any(name + ".yml" in source for source in sources)
+                assert any("application.yml" in source for source in sources)
+            print("Eureka: six applications UP; Config Server: five service configs plus common config: PASS", flush=True)
 
             def login(email):
                 return api("POST", "/api/v1/auth/login", body={"email": email, "password": "Smoke-password-123!"})[0]["accessToken"]
@@ -227,7 +264,7 @@ try:
             command(compose + ["up", "-d", "--no-deps", "--force-recreate", "--wait", "--wait-timeout", "120", "file-service"], timeout=150)
             until(lambda: raw_api("GET", file_path + "/content", developer)[0] == content)
             print("File bytes survive database and service container recreation on retained volume: PASS", flush=True)
-            print("PASS: four event types, JWT, four OpenAPI routes, file upload/download/persistence, Kafka recovery and DLT", flush=True)
+            print("PASS: real full startup, env/key persistence, Eureka/Config/Swagger/UIs, four event types, files, Kafka recovery and DLT", flush=True)
         finally:
             try:
                 command(compose + ["logs", "--no-color"], timeout=60)

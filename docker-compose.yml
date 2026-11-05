@@ -100,6 +100,10 @@ services:
         condition: service_healthy
       users-db:
         condition: service_healthy
+      notifications-db:
+        condition: service_healthy
+      files-db:
+        condition: service_healthy
     restart: unless-stopped
 
   redisinsight:
@@ -123,6 +127,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_MODULE: user-service
+    stop_grace_period: 45s
     environment:
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
@@ -140,8 +145,8 @@ services:
       JWT_TTL_SECONDS: ${JWT_TTL_SECONDS:-900}
       SERVER_PORT: 8080
     volumes:
-      - ./.local/jwt/private.pem:/app/keys/private.pem:ro
-      - ./.local/jwt/public.pem:/app/keys/public.pem:ro
+      - ${JWT_KEY_DIR:-./.local/jwt}/private.pem:/app/keys/private.pem:ro
+      - ${JWT_KEY_DIR:-./.local/jwt}/public.pem:/app/keys/public.pem:ro
     ports:
       - "${USER_SERVICE_PORT:-8082}:8080"
     depends_on:
@@ -180,6 +185,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_MODULE: notification-service
+    stop_grace_period: 45s
     environment:
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
@@ -191,7 +197,7 @@ services:
       JWT_AUDIENCE: ${JWT_AUDIENCE:-task-tracker-api}
       SERVER_PORT: 8080
     volumes:
-      - ./.local/jwt/public.pem:/app/keys/public.pem:ro
+      - ${JWT_KEY_DIR:-./.local/jwt}/public.pem:/app/keys/public.pem:ro
     depends_on:
       config-server:
         condition: service_healthy
@@ -228,6 +234,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_MODULE: file-service
+    stop_grace_period: 45s
     environment:
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
@@ -240,7 +247,7 @@ services:
       FILE_MAX_BYTES: ${FILE_MAX_BYTES:-10485760}
       SERVER_PORT: 8080
     volumes:
-      - ./.local/jwt/public.pem:/app/keys/public.pem:ro
+      - ${JWT_KEY_DIR:-./.local/jwt}/public.pem:/app/keys/public.pem:ro
     depends_on:
       config-server:
         condition: service_healthy
@@ -277,6 +284,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_MODULE: api-gateway
+    stop_grace_period: 45s
     environment:
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
@@ -285,7 +293,7 @@ services:
       FILE_MAX_BYTES: ${FILE_MAX_BYTES:-10485760}
       SERVER_PORT: 8080
     volumes:
-      - ./.local/jwt/public.pem:/app/keys/public.pem:ro
+      - ${JWT_KEY_DIR:-./.local/jwt}/public.pem:/app/keys/public.pem:ro
     ports:
       - "${GATEWAY_PORT:-8081}:8080"
     depends_on:
@@ -315,6 +323,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_MODULE: config-server
+    stop_grace_period: 45s
     environment:
       SERVER_PORT: 8888
       CONFIG_REPOSITORY_LOCATION: file:/config-repository/
@@ -337,6 +346,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_MODULE: discovery-server
+    stop_grace_period: 45s
     environment:
       CONFIG_SERVER_URL: http://config-server:8888
       SERVER_PORT: 8761
@@ -387,6 +397,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    stop_grace_period: 45s
     environment:
       CONFIG_SERVER_URL: http://config-server:8888
       EUREKA_URL: http://discovery-server:8761/eureka/
@@ -404,7 +415,7 @@ services:
       TRACKER_BLOCKING_QUEUED_TASKS: ${TRACKER_BLOCKING_QUEUED_TASKS:-100}
       SERVER_PORT: 8080
     volumes:
-      - ./.local/jwt/public.pem:/app/keys/public.pem:ro
+      - ${JWT_KEY_DIR:-./.local/jwt}/public.pem:/app/keys/public.pem:ro
     ports:
       - "${SERVER_PORT:-8080}:8080"
     depends_on:
@@ -459,6 +470,24 @@ configs:
             "Port": 5432,
             "MaintenanceDB": "users",
             "Username": "${USER_DB_USERNAME:-users}",
+            "SSLMode": "prefer"
+          },
+          "3": {
+            "Name": "Notifications PostgreSQL",
+            "Group": "Task tracker",
+            "Host": "notifications-db",
+            "Port": 5432,
+            "MaintenanceDB": "notifications",
+            "Username": "${NOTIFICATION_DB_USERNAME:-notifications}",
+            "SSLMode": "prefer"
+          },
+          "4": {
+            "Name": "Files PostgreSQL",
+            "Group": "Task tracker",
+            "Host": "files-db",
+            "Port": 5432,
+            "MaintenanceDB": "files",
+            "Username": "${FILE_DB_USERNAME:-files}",
             "SSLMode": "prefer"
           }
         }

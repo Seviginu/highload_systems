@@ -1,46 +1,67 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+cd "$PROJECT_DIR"
+compose=(docker compose "$@")
 
-export POSTGRES_PORT="${POSTGRES_PORT:-55432}"
-export REDIS_PORT="${REDIS_PORT:-56379}"
-export SERVER_PORT="${SERVER_PORT:-58080}"
-export GATEWAY_PORT="${GATEWAY_PORT:-58081}"
-export USER_SERVICE_PORT="${USER_SERVICE_PORT:-58082}"
-export CONFIG_SERVER_PORT="${CONFIG_SERVER_PORT:-58888}"
-export EUREKA_SERVER_PORT="${EUREKA_SERVER_PORT:-58761}"
-export BOOTSTRAP_ADMIN_ENABLED="${BOOTSTRAP_ADMIN_ENABLED:-true}"
-export BOOTSTRAP_ADMIN_NAME="${BOOTSTRAP_ADMIN_NAME:-Supervisor}"
-export BOOTSTRAP_ADMIN_EMAIL="${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}"
-export BOOTSTRAP_ADMIN_PASSWORD="${BOOTSTRAP_ADMIN_PASSWORD:-AdminPassword123!}"
-
-cd "${PROJECT_DIR}"
-
-bash "${SCRIPT_DIR}/generate-jwt-keys.sh"
-docker compose up --build -d
-# Wait for the one-shot init separately: --wait can reject its successful exit.
-init_container=$(docker compose ps -aq kafka-init)
-init_exit=$(docker wait "$init_container")
-if [[ "$init_exit" != 0 ]]; then
-    docker compose logs kafka-init
-    echo "Kafka topic initialization failed (exit $init_exit)" >&2
+# Let Compose resolve shell/.env/--env-file precedence without executing env files.
+"${compose[@]}" config --quiet
+startup_timeout=$("${compose[@]}" config --environment | sed -n 's/^STARTUP_TIMEOUT_SECONDS=//p')
+startup_timeout=${startup_timeout:-180}
+if [[ ! "$startup_timeout" =~ ^[1-9][0-9]*$ ]]; then
+    echo "STARTUP_TIMEOUT_SECONDS must be a positive integer" >&2
     exit 1
 fi
-docker compose up -d --wait --wait-timeout "${STARTUP_TIMEOUT_SECONDS:-180}" \
+key_directory=$("${compose[@]}" config --environment | sed -n 's/^JWT_KEY_DIR=//p')
+key_directory=${key_directory:-$PROJECT_DIR/.local/jwt}
+if [[ "$key_directory" != /* ]]; then key_directory="$PROJECT_DIR/$key_directory"; fi
+export JWT_KEY_DIR="$key_directory"
+bash "$SCRIPT_DIR/generate-jwt-keys.sh"
+
+"${compose[@]}" up --build -d
+# One-shot kafka-init must complete successfully before waiting on long-lived services.
+init_container=$("${compose[@]}" ps -aq kafka-init)
+init_deadline=$((SECONDS + startup_timeout))
+while true; do
+    init_state=$(docker inspect --format '{{.State.Status}} {{.State.ExitCode}}' "$init_container")
+    if [[ "$init_state" == "exited 0" ]]; then break; fi
+    if [[ "$init_state" == exited* || "$init_state" == dead* ]] || (( SECONDS >= init_deadline )); then
+        "${compose[@]}" logs kafka-init
+        echo "Kafka topic initialization failed or timed out: $init_state" >&2
+        exit 1
+    fi
+    sleep 1
+done
+"${compose[@]}" up -d --wait --wait-timeout "$startup_timeout" \
     api-gateway pgadmin redisinsight kafka-1 kafka-2 kafka-3
-swagger_deadline=$((SECONDS + ${STARTUP_TIMEOUT_SECONDS:-180}))
-for service in user-service tracker-service notification-service file-service; do
-    until curl --fail --silent --max-time 5 --output /dev/null \
-            "http://localhost:${GATEWAY_PORT}/v3/api-docs/${service}"; do
-        if (( SECONDS >= swagger_deadline )); then
-            echo "OpenAPI route did not become ready: ${service}" >&2
+
+# Discover the actual published port, including random ports from Compose overrides.
+gateway_address=$("${compose[@]}" port api-gateway 8080)
+gateway_address=${gateway_address%%$'\n'*}
+gateway_port=${gateway_address##*:}
+if [[ ! "$gateway_port" =~ ^[0-9]+$ ]]; then
+    echo "Gateway must publish port 8080 to run the HTTP startup checks" >&2
+    exit 1
+fi
+case "$gateway_address" in
+    0.0.0.0:*) gateway_url="http://127.0.0.1:$gateway_port" ;;
+    \[::\]:*) gateway_url="http://[::1]:$gateway_port" ;;
+    *) gateway_url="http://$gateway_address" ;;
+esac
+http_deadline=$((SECONDS + startup_timeout))
+for path in /swagger-ui/index.html /v3/api-docs/swagger-config \
+    /v3/api-docs/user-service /v3/api-docs/tracker-service \
+    /v3/api-docs/notification-service /v3/api-docs/file-service; do
+    until curl --fail --silent --location --max-time 5 --output /dev/null "$gateway_url$path"; do
+        if (( SECONDS >= http_deadline )); then
+            echo "HTTP startup check timed out: $path" >&2
             exit 1
         fi
         sleep 1
     done
-    echo "OpenAPI is ready: ${service}"
+    echo "HTTP is ready: $path"
 done
-docker compose ps
+"${compose[@]}" ps
+echo "Swagger: $gateway_url/swagger-ui/index.html"
