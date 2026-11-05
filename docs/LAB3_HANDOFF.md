@@ -2,6 +2,8 @@
 
 Состояние реализации: этапы 1–6 в `main`, включая merge-коммит `7416c28`. Этот документ завершает этап 7. Порядок запуска и матрица прав приведены в [README](../README.md).
 
+После этапа 1 ЛР4 ссылки на код user-service актуализированы под Clean Architecture. Результаты сдачи ЛР3 ниже сохранены как исторические; текущая проверка описана в [плане ЛР4](../IMPLEMENTATION_PLAN_LAB4.md).
+
 ## Требования ЛР3
 
 | Требование | Реализация | Подтверждение |
@@ -9,9 +11,9 @@
 | Spring Security и JWT в Authorization | Login в user-service; RS256; независимая проверка JWT в Gateway и обоих сервисах | [JwtSecurityConfiguration](../security-common/src/main/java/itmo/security/JwtSecurityConfiguration.java), [GatewaySecurityTest](../api-gateway/src/test/java/itmo/gateway/GatewaySecurityTest.java), [UserIT](../user-service/src/test/java/itmo/user/UserIT.java) |
 | Ролевая модель | ADMIN — супервайзер, TEAM_LEAD — тимлид, DEVELOPER — разработчик | [TrackerAccess](../tracker-service/src/main/java/itmo/infrastructure/security/TrackerAccess.java), матрица в README |
 | Логика зависит от текущего пользователя | Автор задачи из JWT; тимлид управляет проектами с активным членством; разработчик меняет статус назначенной ему задачи | [CurrentUser](../tracker-service/src/main/java/itmo/infrastructure/security/CurrentUser.java), [TaskServiceImpl](../tracker-service/src/main/java/itmo/task/service/TaskServiceImpl.java), [PermissionsIT](../tracker-service/src/test/java/itmo/security/PermissionsIT.java) |
-| Пароль отсутствует в ответах пользователя | Отдельные UserResponse и UserReference; хэш скрыт при сериализации Entity | [UserResponse](../user-service/src/main/java/itmo/user/dto/UserResponse.java), [UserIT](../user-service/src/test/java/itmo/user/UserIT.java): `shouldHashPasswordAndNeverReturnCredentials` |
-| Хэшированное хранение | BCrypt, поле password_hash; существующие записи остаются без учетных данных до назначения пароля | [PasswordService](../user-service/src/main/java/itmo/user/service/PasswordService.java), [миграция](../user-service/src/main/resources/db/changelog/002-add-password-hash.sql), [UserMigrationIT](../user-service/src/test/java/itmo/user/UserMigrationIT.java) |
-| Создание пользователей только супервайзером | ADMIN-only маршруты и сервисные проверки; первый ADMIN создается явно включаемым bootstrap | [UserServiceImpl](../user-service/src/main/java/itmo/user/service/UserServiceImpl.java), [AdminBootstrap](../user-service/src/main/java/itmo/infrastructure/security/AdminBootstrap.java), [UserIT](../user-service/src/test/java/itmo/user/UserIT.java): `shouldRestrictUserManagementToSupervisorIncludingPasswordAssignment` |
+| Пароль отсутствует в ответах пользователя | Отдельные UserResponse и UserReference; хэш скрыт при сериализации Entity | [UserResponse](../user-service/src/main/java/itmo/user/adapter/in/web/UserResponse.java), [UserIT](../user-service/src/test/java/itmo/user/UserIT.java): `shouldHashPasswordAndNeverReturnCredentials` |
+| Хэшированное хранение | BCrypt, поле password_hash; существующие записи остаются без учетных данных до назначения пароля | [PasswordService](../user-service/src/main/java/itmo/user/adapter/out/security/PasswordService.java), [миграция](../user-service/src/main/resources/db/changelog/002-add-password-hash.sql), [UserMigrationIT](../user-service/src/test/java/itmo/user/UserMigrationIT.java) |
+| Создание пользователей только супервайзером | ADMIN-only маршруты и сервисные проверки; первый ADMIN создается явно включаемым bootstrap | [ManagedUserService](../user-service/src/main/java/itmo/user/configuration/ManagedUserService.java), [AdminBootstrap](../user-service/src/main/java/itmo/user/configuration/AdminBootstrap.java), [UserIT](../user-service/src/test/java/itmo/user/UserIT.java): `shouldRestrictUserManagementToSupervisorIncludingPasswordAssignment` |
 
 Пароль передается во входном JSON login, создания пользователя и назначения пароля. В ответах с моделями пользователя, внутренних ссылках и JWT пароля и хэша нет.
 
@@ -21,7 +23,7 @@
 |---|---|
 | JVM, Spring Boot, Maven, разделение слоев | Java 21; контроллеры, сервисы, репозитории, Entity и DTO; [Maven-модули](../pom.xml) |
 | REST CRUD, статусы, валидация и ошибки | API `/api/v1/users`, `/projects`, `/tasks`, `/labels` и участников; 201/204/400/401/403/404/409/503 по ситуации; Bean Validation и ApiError |
-| Валидация Entity | JPA-валидация в tracker; [BeforeConvertCallback](../user-service/src/main/java/itmo/user/persistence/UserBeforeConvertCallback.java) в R2DBC; соответствующие тесты Entity в UserIT, TaskIT, ProjectIT и LabelIT |
+| Валидация Entity | JPA-валидация в tracker; [BeforeConvertCallback](../user-service/src/main/java/itmo/user/adapter/out/persistence/UserBeforeConvertCallback.java) в R2DBC; соответствующие тесты Entity в UserIT, TaskIT, ProjectIT и LabelIT |
 | Миграции, БД и конфигурация | Liquibase в обоих бизнес-сервисах; две PostgreSQL; параметры окружения и Config Server; [Compose](../docker-compose.yml) |
 | Пагинация до 50 | Публичные списки ограничены `@Max(50)`; `X-Total-Count` содержит общее число записей |
 | Бесконечная прокрутка без общего количества | `GET /api/v1/tasks/feed?limit=20`; Slice и `X-Next-Cursor`, без count query; [TaskIT](../tracker-service/src/test/java/itmo/task/TaskIT.java): `shouldReadTaskFeedByCursorWithoutCountQuery` |
