@@ -27,3 +27,18 @@ app:
     public-key: ${JWT_PUBLIC_KEY:file:/app/keys/public.pem}
     issuer: ${JWT_ISSUER:http://task-tracker}
     audience: ${JWT_AUDIENCE:task-tracker-api}
+
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka-1:9092,kafka-2:9092,kafka-3:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+    listener:
+      ack-mode: record
+    admin:
+      fail-fast: false
