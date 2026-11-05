@@ -1,13 +1,13 @@
 package itmo.user;
 
-import itmo.user.dto.CreateUserRequest;
-import itmo.user.dto.UpdateUserRequest;
-import itmo.user.dto.UserResponse;
-import itmo.user.entity.User;
-import itmo.user.entity.UserRole;
-import itmo.user.repository.UserRepository;
-import itmo.user.service.UserService;
-import itmo.infrastructure.security.AdminBootstrap;
+import itmo.user.adapter.in.web.CreateUserRequest;
+import itmo.user.adapter.in.web.UpdateUserRequest;
+import itmo.user.adapter.in.web.UserResponse;
+import itmo.user.adapter.out.persistence.UserEntity;
+import itmo.user.domain.UserRole;
+import itmo.user.adapter.out.persistence.UserRepository;
+import itmo.user.application.port.in.UserService;
+import itmo.user.configuration.AdminBootstrap;
 import jakarta.validation.Validator;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import jakarta.validation.ConstraintViolationException;
@@ -65,9 +65,7 @@ class UserIT {
     @Autowired
     private Validator validator;
     @Autowired
-    private itmo.user.service.PasswordService passwordService;
-    @Autowired
-    private itmo.user.mapper.UserMapper mapper;
+    private itmo.user.application.service.BootstrapAdminService bootstrapService;
 
     @BeforeEach
     void cleanDatabase() {
@@ -152,7 +150,7 @@ class UserIT {
 
     @Test
     void shouldValidateEntityWithoutControllerAndEnforceDatabaseUniqueness() {
-        StepVerifier.create(users.save(new User("", "not-an-email", null)))
+        StepVerifier.create(users.save(new UserEntity("", "not-an-email", null)))
                 .expectErrorSatisfies(error -> {
                     assertThat(error).isInstanceOf(ConstraintViolationException.class);
                     assertThat(((ConstraintViolationException) error).getConstraintViolations())
@@ -164,7 +162,7 @@ class UserIT {
                 .bodyValue(new CreateUserRequest("Duplicate", "FIRST@EXAMPLE.COM", UserRole.ADMIN, "Test-password-123"))
                 .exchange().expectStatus().isEqualTo(409);
         assertThat(users.count().block()).isEqualTo(1);
-        StepVerifier.create(users.save(new User("Duplicate", "FIRST@example.com", UserRole.ADMIN)))
+        StepVerifier.create(users.save(new UserEntity("Duplicate", "FIRST@example.com", UserRole.ADMIN)))
                 .expectError(DataIntegrityViolationException.class).verify();
     }
 
@@ -225,14 +223,14 @@ class UserIT {
     @Test
     void shouldBootstrapAdminOnceWithoutResettingCredentials() {
         // An old ADMIN without credentials must not prevent initial setup.
-        users.save(new User("Legacy", "legacy@example.com", UserRole.ADMIN)).block();
-        var bootstrap = new AdminBootstrap(users, passwordService, mapper, validator,
+        users.save(new UserEntity("Legacy", "legacy@example.com", UserRole.ADMIN)).block();
+        var bootstrap = new AdminBootstrap(bootstrapService, validator,
                 "Supervisor", "supervisor@example.com", "Bootstrap-password-123");
         bootstrap.run(null);
         var admin = users.findAll().filter(u -> u.getEmail().equals("supervisor@example.com")).blockFirst();
         assertThat(admin.getRole()).isEqualTo(UserRole.ADMIN);
         assertThat(passwords.matches("Bootstrap-password-123", admin.getPasswordHash())).isTrue();
-        new AdminBootstrap(users, passwordService, mapper, validator,
+        new AdminBootstrap(bootstrapService, validator,
                 "Changed", "other@example.com", "Different-password-123").run(null);
         assertThat(users.count().block()).isEqualTo(2);
         var unchanged = users.findById(admin.getId()).block();
@@ -242,10 +240,10 @@ class UserIT {
 
     @Test
     void shouldNeverPromoteExistingBootstrapEmail() {
-        var existing = users.save(new User("Existing", "supervisor@example.com", UserRole.DEVELOPER)).block();
-        var bootstrap = new AdminBootstrap(users, passwordService, mapper, validator,
+        var existing = users.save(new UserEntity("Existing", "supervisor@example.com", UserRole.DEVELOPER)).block();
+        var bootstrap = new AdminBootstrap(bootstrapService, validator,
                 "Supervisor", "supervisor@example.com", "Bootstrap-password-123");
-        StepVerifier.create(bootstrap.initialize()).expectError(itmo.common.exception.ConflictException.class).verify();
+        StepVerifier.create(bootstrap.initialize()).expectError(itmo.user.application.exception.ConflictException.class).verify();
         var unchanged = users.findById(existing.getId()).block();
         assertThat(unchanged.getRole()).isEqualTo(UserRole.DEVELOPER);
         assertThat(unchanged.getPasswordHash()).isNull();
@@ -254,7 +252,7 @@ class UserIT {
 
     @Test
     void shouldRejectInvalidBootstrapConfigurationWithoutExposingPassword() {
-        var bootstrap = new AdminBootstrap(users, passwordService, mapper, validator,
+        var bootstrap = new AdminBootstrap(bootstrapService, validator,
                 "Supervisor", "invalid", "short");
         StepVerifier.create(bootstrap.initialize()).expectErrorSatisfies(error -> {
             assertThat(error).isInstanceOf(IllegalStateException.class);
@@ -267,8 +265,8 @@ class UserIT {
     void shouldLoginWithRealJwtAndGetCurrentProfile() {
         var created = create("Alice", "alice@example.com", UserRole.DEVELOPER);
         var response = anonymous().post().uri("/api/v1/auth/login")
-                .bodyValue(new itmo.user.dto.LoginRequest("ALICE@EXAMPLE.COM", "Test-password-123"))
-                .exchange().expectStatus().isOk().expectBody(itmo.user.dto.TokenResponse.class)
+                .bodyValue(new itmo.user.adapter.in.web.LoginRequest("ALICE@EXAMPLE.COM", "Test-password-123"))
+                .exchange().expectStatus().isOk().expectBody(itmo.user.adapter.in.web.TokenResponse.class)
                 .returnResult().getResponseBody();
         assertThat(response.tokenType()).isEqualTo("Bearer");
         assertThat(response.expiresIn()).isEqualTo(900);
@@ -282,11 +280,11 @@ class UserIT {
     void shouldRejectMissingWrongDeletedAndUninitializedCredentialsIdentically() {
         var removed = create("Removed", "removed@example.com", UserRole.DEVELOPER);
         client.delete().uri("/api/v1/users/{id}", removed.id()).exchange().expectStatus().isNoContent();
-        users.save(new User("Legacy", "legacy@example.com", UserRole.DEVELOPER)).block();
+        users.save(new UserEntity("Legacy", "legacy@example.com", UserRole.DEVELOPER)).block();
         create("Active", "active@example.com", UserRole.DEVELOPER);
         for (String email : new String[]{"missing@example.com", "removed@example.com", "legacy@example.com", "active@example.com"}) {
             anonymous().post().uri("/api/v1/auth/login")
-                    .bodyValue(new itmo.user.dto.LoginRequest(email, "wrong-password"))
+                    .bodyValue(new itmo.user.adapter.in.web.LoginRequest(email, "wrong-password"))
                     .exchange().expectStatus().isUnauthorized().expectBody()
                     .jsonPath("$.message").isEqualTo("Invalid email or password")
                     .jsonPath("$.password").doesNotExist();
@@ -308,7 +306,7 @@ class UserIT {
                     .bodyValue(new UpdateUserRequest("Admin", "alice@example.com", UserRole.ADMIN))
                     .exchange().expectStatus().isForbidden();
             restricted.put().uri("/api/v1/users/{id}/password", created.id())
-                    .bodyValue(new itmo.user.dto.PasswordRequest("Changed-password-123"))
+                    .bodyValue(new itmo.user.adapter.in.web.PasswordRequest("Changed-password-123"))
                     .exchange().expectStatus().isForbidden();
             restricted.delete().uri("/api/v1/users/{id}", created.id()).exchange().expectStatus().isForbidden();
         }
@@ -320,21 +318,21 @@ class UserIT {
 
     @Test
     void shouldLetSupervisorInitializeLegacyPasswordAndReplaceIt() {
-        var legacy = users.save(new User("Legacy", "legacy@example.com", UserRole.DEVELOPER)).block();
+        var legacy = users.save(new UserEntity("Legacy", "legacy@example.com", UserRole.DEVELOPER)).block();
         for (String password : new String[]{"First-password-123", "Second-password-123"}) {
             client.put().uri("/api/v1/users/{id}/password", legacy.getId())
-                    .bodyValue(new itmo.user.dto.PasswordRequest(password)).exchange().expectStatus().isNoContent();
+                    .bodyValue(new itmo.user.adapter.in.web.PasswordRequest(password)).exchange().expectStatus().isNoContent();
             anonymous().post().uri("/api/v1/auth/login")
-                    .bodyValue(new itmo.user.dto.LoginRequest(legacy.getEmail(), password))
+                    .bodyValue(new itmo.user.adapter.in.web.LoginRequest(legacy.getEmail(), password))
                     .exchange().expectStatus().isOk();
         }
         anonymous().post().uri("/api/v1/auth/login")
-                .bodyValue(new itmo.user.dto.LoginRequest(legacy.getEmail(), "First-password-123"))
+                .bodyValue(new itmo.user.adapter.in.web.LoginRequest(legacy.getEmail(), "First-password-123"))
                 .exchange().expectStatus().isUnauthorized();
         client.put().uri("/api/v1/users/{id}/password", legacy.getId())
-                .bodyValue(new itmo.user.dto.PasswordRequest("short")).exchange().expectStatus().isBadRequest();
+                .bodyValue(new itmo.user.adapter.in.web.PasswordRequest("short")).exchange().expectStatus().isBadRequest();
         client.put().uri("/api/v1/users/999999/password")
-                .bodyValue(new itmo.user.dto.PasswordRequest("Valid-password-123")).exchange().expectStatus().isNotFound();
+                .bodyValue(new itmo.user.adapter.in.web.PasswordRequest("Valid-password-123")).exchange().expectStatus().isNotFound();
     }
 
     @Test
