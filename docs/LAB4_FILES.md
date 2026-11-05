@@ -17,9 +17,10 @@ Event-contracts содержит FileUploadedEvent v1. AggregateId — UUID фа
 Все операции доступны через Gateway и требуют Bearer JWT. Любая роль может загружать файл; получать метаданные и содержимое может владелец либо ADMIN. OwnerId определяется по sub JWT. Другой пользователь получает 403; неизвестный UUID — 404; отсутствие/ошибка JWT — 401.
 
 ```bash
-curl -i -H "Authorization: Bearer $TOKEN" -F 'file=@./sample.bin' http://localhost:58081/api/v1/files
-curl -H "Authorization: Bearer $TOKEN" http://localhost:58081/api/v1/files/$FILE_ID
-curl -H "Authorization: Bearer $TOKEN" http://localhost:58081/api/v1/files/$FILE_ID/content -o downloaded.bin
+BASE_URL=http://localhost:8081
+curl -i -H "Authorization: Bearer $TOKEN" -F 'file=@./sample.bin' $BASE_URL/api/v1/files
+curl -H "Authorization: Bearer $TOKEN" $BASE_URL/api/v1/files/$FILE_ID
+curl -H "Authorization: Bearer $TOKEN" $BASE_URL/api/v1/files/$FILE_ID/content -o downloaded.bin
 cmp sample.bin downloaded.bin
 ```
 
