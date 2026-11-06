@@ -44,9 +44,6 @@ public class OutboxPublisher {
                         .get(10, TimeUnit.SECONDS);
                 outbox.published(event.getId(), clock.instant());
             } catch (Exception error) {
-                if (error instanceof InterruptedException) {
-                    Thread.currentThread().interrupt();
-                }
                 outbox.failed(
                         event.getId(),
                         clock.instant().plusSeconds(5),
