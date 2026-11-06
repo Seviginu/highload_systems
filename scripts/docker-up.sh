@@ -35,7 +35,7 @@ while true; do
     sleep 1
 done
 "${compose[@]}" up -d --wait --wait-timeout "$startup_timeout" \
-    api-gateway pgadmin redisinsight kafka-1 kafka-2 kafka-3
+    api-gateway pgadmin redisinsight kafka-ui kafka-1 kafka-2 kafka-3
 
 # Discover the actual published port, including random ports from Compose overrides.
 gateway_address=$("${compose[@]}" port api-gateway 8080)
@@ -65,3 +65,5 @@ for path in /swagger-ui/index.html /v3/api-docs/swagger-config \
 done
 "${compose[@]}" ps
 echo "Swagger: $gateway_url/swagger-ui/index.html"
+kafka_ui_address=$("${compose[@]}" port kafka-ui 8080)
+echo "Kafka UI: http://$kafka_ui_address"

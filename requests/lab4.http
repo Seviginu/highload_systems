@@ -1,8 +1,3 @@
-# IntelliJ IDEA HTTP Client. Выбрать окружение lab4, выполнять запросы по одному.
-# Скопировать http-client.private.env.json.example в http-client.private.env.json
-# и задать свои adminEmail/adminPassword; этот private env исключен из Git.
-# Первый login начинает новый прогон; ID/токены берутся из ответов.
-
 ### 1. ADMIN login — 200; новый уникальный суффикс учебных данных
 POST {{baseUrl}}/api/v1/auth/login
 Content-Type: application/json
