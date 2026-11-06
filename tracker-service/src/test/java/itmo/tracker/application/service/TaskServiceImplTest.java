@@ -24,6 +24,10 @@ import itmo.tracker.application.port.in.LabelService;
 import itmo.tracker.application.port.in.ProjectMemberService;
 import itmo.tracker.application.port.in.ProjectService;
 import itmo.tracker.application.port.out.TaskStore;
+import itmo.tracker.application.port.out.TaskAssignments;
+import itmo.tracker.application.port.out.TaskStatusChanges;
+import itmo.tracker.application.usecase.CreateTaskUseCase;
+import itmo.tracker.application.usecase.ChangeTaskStatusUseCase;
 import itmo.tracker.application.port.out.UserDirectoryPort;
 import itmo.tracker.domain.Label;
 import itmo.tracker.domain.Project;
@@ -63,20 +67,29 @@ class TaskServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        var access = itmo.support.TestActors.access();
+        var mapper = new TaskMapper();
+        var transactions = new TestTransactions();
+        var assignments = org.mockito.Mockito.mock(TaskAssignments.class);
+        var statusChanges = org.mockito.Mockito.mock(TaskStatusChanges.class);
         taskService =
                 new TaskServiceImpl(
-                        itmo.support.TestActors.access(),
+                        access,
                         taskRepository,
-                        new TaskMapper(),
+                        mapper,
                         projectService,
                         projectMemberService,
                         userDirectory,
-                        new TestTransactions(),
+                        transactions,
                         labelService,
-                        org.mockito.Mockito.mock(
-                                itmo.tracker.application.port.out.TaskAssignments.class),
-                        org.mockito.Mockito.mock(
-                                itmo.tracker.application.port.out.TaskStatusChanges.class));
+                        assignments,
+                        statusChanges,
+                        new CreateTaskUseCase(
+                                access, taskRepository, mapper, projectService,
+                                projectMemberService, userDirectory, transactions,
+                                labelService, assignments),
+                        new ChangeTaskStatusUseCase(
+                                access, taskRepository, mapper, transactions, statusChanges));
         project = new Project("Platform", "PLATFORM", null, ProjectStatus.ACTIVE);
         author = new TestUser("TEAM_LEAD");
         label = new Label("Backend", "#112233");

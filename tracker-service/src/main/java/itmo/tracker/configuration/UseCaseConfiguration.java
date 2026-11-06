@@ -4,6 +4,8 @@ import itmo.tracker.application.mapper.*;
 import itmo.tracker.application.port.in.*;
 import itmo.tracker.application.port.out.*;
 import itmo.tracker.application.service.*;
+import itmo.tracker.application.usecase.CreateTaskUseCase;
+import itmo.tracker.application.usecase.ChangeTaskStatusUseCase;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -44,6 +46,31 @@ public class UseCaseConfiguration {
     }
 
     @Bean
+    CreateTaskUseCase createTaskUseCase(
+            TrackerAccess access,
+            TaskStore tasks,
+            ProjectService projects,
+            ProjectMemberService members,
+            UserDirectoryPort users,
+            UnitOfWork transactions,
+            LabelService labels,
+            TaskAssignments assignments) {
+        return new CreateTaskUseCase(
+                access, tasks, new TaskMapper(), projects, members, users,
+                transactions, labels, assignments);
+    }
+
+    @Bean
+    ChangeTaskStatusUseCase changeTaskStatusUseCase(
+            TrackerAccess access,
+            TaskStore tasks,
+            UnitOfWork transactions,
+            TaskStatusChanges statusChanges) {
+        return new ChangeTaskStatusUseCase(
+                access, tasks, new TaskMapper(), transactions, statusChanges);
+    }
+
+    @Bean
     TaskService taskService(
             TrackerAccess access,
             TaskStore tasks,
@@ -53,7 +80,9 @@ public class UseCaseConfiguration {
             UnitOfWork transactions,
             LabelService labels,
             TaskAssignments assignments,
-            TaskStatusChanges statusChanges) {
+            TaskStatusChanges statusChanges,
+            CreateTaskUseCase createTask,
+            ChangeTaskStatusUseCase changeTaskStatus) {
         return new CachedTaskService(
                 new TaskServiceImpl(
                         access,
@@ -65,6 +94,8 @@ public class UseCaseConfiguration {
                         transactions,
                         labels,
                         assignments,
-                        statusChanges));
+                        statusChanges,
+                        createTask,
+                        changeTaskStatus));
     }
 }

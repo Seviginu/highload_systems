@@ -25,6 +25,8 @@ import itmo.tracker.application.port.out.TaskStatusChanges;
 import itmo.tracker.application.port.out.TaskStore;
 import itmo.tracker.application.port.out.UnitOfWork;
 import itmo.tracker.application.port.out.UserDirectoryPort;
+import itmo.tracker.application.usecase.CreateTaskUseCase;
+import itmo.tracker.application.usecase.ChangeTaskStatusUseCase;
 import itmo.tracker.domain.Label;
 import itmo.tracker.domain.Project;
 import itmo.tracker.domain.Task;
@@ -44,7 +46,9 @@ public class TaskServiceImpl implements TaskService {
             UnitOfWork transactions,
             LabelService labelService,
             TaskAssignments assignments,
-            TaskStatusChanges statusChanges) {
+            TaskStatusChanges statusChanges,
+            CreateTaskUseCase createTask,
+            ChangeTaskStatusUseCase changeTaskStatus) {
         this.access = access;
         this.taskRepository = taskRepository;
         this.taskMapper = taskMapper;
@@ -55,8 +59,12 @@ public class TaskServiceImpl implements TaskService {
         this.labelService = labelService;
         this.assignments = assignments;
         this.statusChanges = statusChanges;
+        this.createTask = createTask;
+        this.changeTaskStatus = changeTaskStatus;
     }
 
+    private final CreateTaskUseCase createTask;
+    private final ChangeTaskStatusUseCase changeTaskStatus;
     private final TrackerAccess access;
 
     private final TaskStore taskRepository;
@@ -71,25 +79,7 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public TaskView create(CreateTaskCommand request, Actor actor) {
-        access.requireManager(actor);
-        userDirectory.requireUsers(actor.id(), request.assigneeId());
-        return transactions.write(
-                () -> {
-                    access.requireProjectManager(request.projectId(), actor);
-                    String normalizedKey = taskMapper.normalizeTaskKey(request.taskKey());
-                    ensureTaskKeyAvailable(normalizedKey);
-
-                    Project project = resolveProject(request.projectId());
-                    Long author = actor.id();
-                    Long assignee = request.assigneeId();
-                    requireAssigneeMember(request.projectId(), assignee);
-                    Set<Label> labels = resolveLabels(request.labelIds());
-
-                    Task task = taskMapper.toDomain(request, author, assignee, project, labels);
-                    Task saved = taskRepository.save(task);
-                    appendAssignment(saved, null, actor);
-                    return taskMapper.toResponse(saved);
-                });
+        return createTask.execute(request, actor);
     }
 
     @Override
@@ -224,20 +214,7 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public TaskView changeStatus(Long id, ChangeTaskStatusCommand request, Actor actor) {
-        return transactions.write(
-                () -> {
-                    Task task = findEntity(id);
-                    access.requireStatusChange(task, actor);
-                    if (!Objects.equals(task.getVersion(), request.version())) {
-                        throw versionConflict(id);
-                    }
-                    TaskStatus previousStatus = task.getStatus();
-                    task.changeStatus(request.status());
-
-                    Task saved = taskRepository.saveStatus(task);
-                    appendStatusChange(saved, previousStatus, actor);
-                    return taskMapper.toResponse(saved);
-                });
+        return changeTaskStatus.execute(id, request, actor);
     }
 
     private void appendStatusChange(Task task, TaskStatus previousStatus, Actor actor) {
@@ -290,12 +267,6 @@ public class TaskServiceImpl implements TaskService {
 
     private Set<Label> resolveLabels(Set<Long> labelIds) {
         return labelService.requireEntities(labelIds);
-    }
-
-    private void ensureTaskKeyAvailable(String taskKey) {
-        if (taskRepository.existsByTaskKey(taskKey)) {
-            throw taskKeyConflict(taskKey);
-        }
     }
 
     private ConflictException taskKeyConflict(String taskKey) {

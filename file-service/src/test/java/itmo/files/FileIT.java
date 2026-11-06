@@ -15,6 +15,10 @@ import org.springframework.http.*;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
+import software.amazon.awssdk.services.s3.S3Client;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -31,6 +35,25 @@ class FileIT {
     @Container @ServiceConnection
     static final PostgreSQLContainer<?> DB = new PostgreSQLContainer<>("postgres:16-alpine");
 
+    @Container
+    static final GenericContainer<?> S3 = new GenericContainer<>(
+            "pgsty/silo:RELEASE.2026-10-26T00-00-00Z")
+            .withEnv("MINIO_ROOT_USER", "test-access")
+            .withEnv("MINIO_ROOT_PASSWORD", "test-secret")
+            .withCommand("server", "/data")
+            .withExposedPorts(9000)
+            .waitingFor(org.testcontainers.containers.wait.strategy.Wait
+                    .forHttp("/minio/health/ready").forPort(9000));
+
+    @DynamicPropertySource
+    static void s3Properties(DynamicPropertyRegistry registry) {
+        registry.add("app.files.s3.endpoint", () -> "http://" + S3.getHost() + ":" + S3.getMappedPort(9000));
+        registry.add("app.files.s3.access-key", () -> "test-access");
+        registry.add("app.files.s3.secret-key", () -> "test-secret");
+        registry.add("app.files.s3.bucket", () -> "files-test");
+    }
+
+    @Autowired S3Client s3;
     WebTestClient http;
     @org.springframework.boot.test.web.server.LocalServerPort int port;
     @Autowired JdbcTemplate jdbc;
@@ -39,6 +62,8 @@ class FileIT {
     void clear() {
         http = WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
         jdbc.execute("TRUNCATE file_contents,files,outbox_events");
+        s3.listObjectsV2Paginator(r -> r.bucket("files-test")).contents()
+                .forEach(object -> s3.deleteObject(r -> r.bucket("files-test").key(object.key())));
     }
 
     WebTestClient as(long id, String role) {
@@ -131,8 +156,9 @@ class FileIT {
         assertThat(event.path("recipientIds").get(0).asLong()).isEqualTo(2);
         assertThat(event.path("payload").path("size").asLong()).isEqualTo(bytes.length);
         assertThat(event.toString()).doesNotContain("password", "Bearer", "bytes", "filename");
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM file_contents", Long.class))
-                .isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM file_contents", Long.class)).isZero();
+        assertThat(s3.getObjectAsBytes(r -> r.bucket("files-test").key(file.id().toString()))
+                .asByteArray()).isEqualTo(bytes);
     }
 
     @Test
@@ -216,6 +242,7 @@ class FileIT {
             for (String table : List.of("files", "file_contents", "outbox_events"))
                 assertThat(jdbc.queryForObject("SELECT count(*) FROM " + table, Long.class))
                         .isZero();
+            assertThat(s3.listObjectsV2(r -> r.bucket("files-test")).contents()).isEmpty();
         } finally {
             jdbc.execute("ALTER TABLE outbox_events DROP CONSTRAINT test_failure");
         }
