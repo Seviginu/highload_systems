@@ -1,0 +1,314 @@
+# IntelliJ IDEA HTTP Client. Выбрать окружение lab4, выполнять запросы по одному.
+# Скопировать http-client.private.env.json.example в http-client.private.env.json
+# и задать свои adminEmail/adminPassword; этот private env исключен из Git.
+# Первый login начинает новый прогон; ID/токены берутся из ответов.
+
+### 1. ADMIN login — 200; новый уникальный суффикс учебных данных
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{"email":"{{adminEmail}}","password":"{{adminPassword}}"}
+
+> {%
+client.test("ADMIN login", () => client.assert(response.status === 200));
+client.global.set("adminToken", response.body.accessToken);
+client.global.set("lab4RunId", String(Date.now()));
+client.global.set("notificationId", "WAIT_FOR_NOTIFICATION");
+%}
+
+### 2. Создать тимлида — 201; пароль отсутствует в ответе
+POST {{baseUrl}}/api/v1/users
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"name":"LR4 Lead","email":"lr4-lead-{{lab4RunId}}@example.invalid","role":"TEAM_LEAD","password":"{{demoPassword}}"}
+
+> {%
+client.test("User created without credentials", () => {
+    client.assert(response.status === 201);
+    client.assert(!("password" in response.body) && !("passwordHash" in response.body));
+});
+client.global.set("leadId", String(response.body.id));
+%}
+
+### 3. Создать разработчика — 201
+POST {{baseUrl}}/api/v1/users
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"name":"LR4 Developer","email":"lr4-dev-{{lab4RunId}}@example.invalid","role":"DEVELOPER","password":"{{demoPassword}}"}
+
+> {% client.test("Developer created", () => client.assert(response.status === 201)); client.global.set("developerId", String(response.body.id)); %}
+
+### 4. Создать другого разработчика — 201
+POST {{baseUrl}}/api/v1/users
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{"name":"LR4 Other","email":"lr4-other-{{lab4RunId}}@example.invalid","role":"DEVELOPER","password":"{{demoPassword}}"}
+
+> {% client.test("Other developer created", () => client.assert(response.status === 201)); client.global.set("otherId", String(response.body.id)); %}
+
+### 5. Login TEAM_LEAD — 200
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{"email":"lr4-lead-{{lab4RunId}}@example.invalid","password":"{{demoPassword}}"}
+
+> {% client.test("Lead login", () => client.assert(response.status === 200)); client.global.set("leadToken", response.body.accessToken); %}
+
+### 6. Login DEVELOPER — 200
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{"email":"lr4-dev-{{lab4RunId}}@example.invalid","password":"{{demoPassword}}"}
+
+> {% client.test("Developer login", () => client.assert(response.status === 200)); client.global.set("developerToken", response.body.accessToken); %}
+
+### 7. Login другого разработчика — 200
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{"email":"lr4-other-{{lab4RunId}}@example.invalid","password":"{{demoPassword}}"}
+
+> {% client.test("Other login", () => client.assert(response.status === 200)); client.global.set("otherToken", response.body.accessToken); %}
+
+### 8. DEVELOPER не может создавать пользователей — 403
+POST {{baseUrl}}/api/v1/users
+Authorization: Bearer {{developerToken}}
+Content-Type: application/json
+
+{"name":"Forbidden","email":"forbidden-{{lab4RunId}}@example.invalid","role":"DEVELOPER","password":"{{demoPassword}}"}
+
+> {% client.test("Only supervisor creates users", () => client.assert(response.status === 403)); %}
+
+### 9. Проект и автоматическое членство тимлида — 201, ProjectMemberAdded
+POST {{baseUrl}}/api/v1/projects
+Authorization: Bearer {{leadToken}}
+Content-Type: application/json
+
+{"name":"LR4 Demo","code":"LR4{{lab4RunId}}","status":"ACTIVE","teamLeadId":{{leadId}}}
+
+> {% client.test("Project created", () => client.assert(response.status === 201)); client.global.set("projectId", String(response.body.id)); %}
+
+### 10. Добавить разработчика — 201, ProjectMemberAdded
+POST {{baseUrl}}/api/v1/projects/{{projectId}}/members
+Authorization: Bearer {{leadToken}}
+Content-Type: application/json
+
+{"userId":{{developerId}}}
+
+> {% client.test("Member added", () => client.assert(response.status === 201)); client.global.set("developerMembershipId", String(response.body.id)); %}
+
+### 11. Добавить другого разработчика — 201
+POST {{baseUrl}}/api/v1/projects/{{projectId}}/members
+Authorization: Bearer {{leadToken}}
+Content-Type: application/json
+
+{"userId":{{otherId}}}
+
+> {% client.test("Other member added", () => client.assert(response.status === 201)); %}
+
+### 12. Назначить задачу — 201; authorId берется из JWT, TaskAssigned
+POST {{baseUrl}}/api/v1/tasks
+Authorization: Bearer {{leadToken}}
+Content-Type: application/json
+
+{"taskKey":"LR4-{{lab4RunId}}","title":"LR4 assignment","status":"TODO","priority":"HIGH","projectId":{{projectId}},"assigneeId":{{developerId}},"labelIds":[]}
+
+> {%
+client.test("Task created by current lead", () => {
+    client.assert(response.status === 201);
+    client.assert(String(response.body.authorId) === client.global.get("leadId"));
+});
+client.global.set("taskId", String(response.body.id));
+client.global.set("initialVersion", String(response.body.version));
+client.global.set("taskVersion", String(response.body.version));
+%}
+
+### 13. Вторая задача для демонстрации cursor feed — 201
+POST {{baseUrl}}/api/v1/tasks
+Authorization: Bearer {{leadToken}}
+Content-Type: application/json
+
+{"taskKey":"LR4B-{{lab4RunId}}","title":"LR4 cursor","status":"TODO","priority":"MEDIUM","projectId":{{projectId}},"assigneeId":{{otherId}},"labelIds":[]}
+
+> {% client.test("Second task created", () => client.assert(response.status === 201)); %}
+
+### 14. Исполнитель меняет статус — 200; автору TaskStatusChanged
+PATCH {{baseUrl}}/api/v1/tasks/{{taskId}}/status
+Authorization: Bearer {{developerToken}}
+Content-Type: application/json
+
+{"status":"IN_PROGRESS","version":{{taskVersion}}}
+
+> {% client.test("Assigned developer changes status", () => client.assert(response.status === 200)); client.global.set("taskVersion", String(response.body.version)); %}
+
+### 15. Другой разработчик не может менять статус — 403
+PATCH {{baseUrl}}/api/v1/tasks/{{taskId}}/status
+Authorization: Bearer {{otherToken}}
+Content-Type: application/json
+
+{"status":"DONE","version":{{taskVersion}}}
+
+> {% client.test("Other developer denied", () => client.assert(response.status === 403)); %}
+
+### 16. Устаревшая версия — 409
+PATCH {{baseUrl}}/api/v1/tasks/{{taskId}}/status
+Authorization: Bearer {{developerToken}}
+Content-Type: application/json
+
+{"status":"DONE","version":{{initialVersion}}}
+
+> {% client.test("Stale version rejected", () => client.assert(response.status === 409)); %}
+
+### 17. Страница с общим количеством — 200, X-Total-Count
+GET {{baseUrl}}/api/v1/tasks?size=1
+Authorization: Bearer {{leadToken}}
+
+> {% client.test("Page has total", () => client.assert(response.status === 200 && response.headers.valueOf("X-Total-Count") !== null)); %}
+
+### 18. Feed без общего количества — 200, X-Next-Cursor
+GET {{baseUrl}}/api/v1/tasks/feed?limit=1
+Authorization: Bearer {{leadToken}}
+
+> {%
+client.test("Feed without total", () => {
+    client.assert(response.status === 200);
+    client.assert(response.headers.valueOf("X-Total-Count") === null);
+});
+client.global.set("nextCursor", response.headers.valueOf("X-Next-Cursor"));
+%}
+
+### 19. Следующая страница feed — 200
+GET {{baseUrl}}/api/v1/tasks/feed?limit=1&afterId={{nextCursor}}
+Authorization: Bearer {{leadToken}}
+
+### 20. Больше 50 уведомлений за запрос запрещено — 400
+GET {{baseUrl}}/api/v1/notifications?size=51
+Authorization: Bearer {{developerToken}}
+
+> {% client.test("Page bounded at 50", () => client.assert(response.status === 400)); %}
+
+### 21. Свои уведомления; при пустом результате повторить через 1–2 секунды
+GET {{baseUrl}}/api/v1/notifications?size=50
+Authorization: Bearer {{developerToken}}
+
+> {%
+client.test("Notifications are owned", () => {
+    client.assert(response.status === 200);
+    client.assert(response.body.every(n => String(n.recipientId) === client.global.get("developerId")));
+});
+const notice = response.body.find(n => n.type === "TaskAssigned" && n.resourceId === client.global.get("taskId"));
+client.test("TaskAssigned delivered; repeat GET if pending", () => client.assert(notice !== undefined));
+if (notice) client.global.set("notificationId", notice.id);
+%}
+
+### 22. Чужое уведомление — 404 (также для ADMIN)
+PATCH {{baseUrl}}/api/v1/notifications/{{notificationId}}/read
+Authorization: Bearer {{adminToken}}
+
+> {% client.test("Admin cannot read foreign notification", () => client.assert(response.status === 404)); %}
+
+### 23. Владелец отмечает прочитанным — 204; повторить: первое readAt сохраняется
+PATCH {{baseUrl}}/api/v1/notifications/{{notificationId}}/read
+Authorization: Bearer {{developerToken}}
+
+> {% client.test("Owner marks read", () => client.assert(response.status === 204)); %}
+
+### 24. Уведомления автора: ProjectMemberAdded и TaskStatusChanged
+GET {{baseUrl}}/api/v1/notifications?size=50
+Authorization: Bearer {{leadToken}}
+
+### 25. Файл от DEVELOPER — 201, Location и FileUploaded (включая самого инициатора)
+POST {{baseUrl}}/api/v1/files
+Authorization: Bearer {{developerToken}}
+Content-Type: multipart/form-data; boundary=lab4-proof-boundary
+
+--lab4-proof-boundary
+Content-Disposition: form-data; name="file"; filename="sample.txt"
+Content-Type: text/plain
+
+< ./sample.txt
+--lab4-proof-boundary--
+
+> {% client.test("File created", () => client.assert(response.status === 201)); client.global.set("fileId", response.body.id); %}
+
+### 26. Метаданные — 200, без бинарного содержимого
+GET {{baseUrl}}/api/v1/files/{{fileId}}
+Authorization: Bearer {{developerToken}}
+
+### 27. Скачать владельцу — 200, attachment и исходные байты sample.txt
+GET {{baseUrl}}/api/v1/files/{{fileId}}/content
+Authorization: Bearer {{developerToken}}
+
+### 28. ADMIN может скачать файл другого пользователя — 200
+GET {{baseUrl}}/api/v1/files/{{fileId}}/content
+Authorization: Bearer {{adminToken}}
+
+### 29. Другой разработчик не может скачать — 403
+GET {{baseUrl}}/api/v1/files/{{fileId}}/content
+Authorization: Bearer {{otherToken}}
+
+> {% client.test("Foreign file forbidden", () => client.assert(response.status === 403)); %}
+
+### 30. Без JWT — 401
+GET {{baseUrl}}/api/v1/files/{{fileId}}
+
+> {% client.test("JWT required", () => client.assert(response.status === 401)); %}
+
+### 31. Несуществующий файл — 404
+GET {{baseUrl}}/api/v1/files/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{developerToken}}
+
+> {% client.test("Missing file", () => client.assert(response.status === 404)); %}
+
+### 32. Пустой файл — 400
+POST {{baseUrl}}/api/v1/files
+Authorization: Bearer {{developerToken}}
+Content-Type: multipart/form-data; boundary=lab4-empty-boundary
+
+--lab4-empty-boundary
+Content-Disposition: form-data; name="file"; filename="empty.txt"
+Content-Type: text/plain
+
+
+--lab4-empty-boundary--
+
+> {% client.test("Empty file rejected", () => client.assert(response.status === 400)); %}
+
+### 33. Свои уведомления: FileUploaded с resourceId равным fileId
+GET {{baseUrl}}/api/v1/notifications?size=50
+Authorization: Bearer {{developerToken}}
+
+### 34. Деактивация членства — 204
+DELETE {{baseUrl}}/api/v1/projects/{{projectId}}/members/{{developerMembershipId}}
+Authorization: Bearer {{leadToken}}
+
+> {% client.test("Member deactivated", () => client.assert(response.status === 204)); %}
+
+### 35. Действующий JWT не обходит проверку активного членства — 403
+PATCH {{baseUrl}}/api/v1/tasks/{{taskId}}/status
+Authorization: Bearer {{developerToken}}
+Content-Type: application/json
+
+{"status":"DONE","version":{{taskVersion}}}
+
+> {% client.test("Inactive member denied", () => client.assert(response.status === 403)); %}
+
+### 36. Повторная активация — 201, новое ProjectMemberAdded
+POST {{baseUrl}}/api/v1/projects/{{projectId}}/members
+Authorization: Bearer {{leadToken}}
+Content-Type: application/json
+
+{"userId":{{developerId}}}
+
+> {% client.test("Member reactivated", () => client.assert(response.status === 201)); %}
+
+### 37. Обновить только ADMIN JWT при длинной демонстрации, не меняя runId
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{"email":"{{adminEmail}}","password":"{{adminPassword}}"}
+
+> {% client.test("ADMIN token refreshed", () => client.assert(response.status === 200)); client.global.set("adminToken", response.body.accessToken); %}

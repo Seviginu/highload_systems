@@ -264,7 +264,101 @@ try:
             command(compose + ["up", "-d", "--no-deps", "--force-recreate", "--wait", "--wait-timeout", "120", "file-service"], timeout=150)
             until(lambda: raw_api("GET", file_path + "/content", developer)[0] == content)
             print("File bytes survive database and service container recreation on retained volume: PASS", flush=True)
-            print("PASS: real full startup, env/key persistence, Eureka/Config/Swagger/UIs, four event types, files, Kafka recovery and DLT", flush=True)
+            # Find the partition of an actually delivered assignment from offset deltas.
+            broker = "kafka-1"
+            bootstrap = "kafka-1:9092"
+
+            def kafka_cli(tool, *args):
+                return command(compose + ["exec", "-T", broker, "env", "KAFKA_HEAP_OPTS=-Xms32m -Xmx128m",
+                    "/opt/kafka/bin/" + tool, "--bootstrap-server", bootstrap, *args], capture=True, timeout=20)
+
+            def offsets():
+                lines = kafka_cli("kafka-get-offsets.sh", "--topic", "tracker.task.events.v1", "--time", "-1")
+                return {int(line.split(":")[-2]): int(line.split(":")[-1]) for line in lines.splitlines()}
+
+            def topic_state():
+                text = kafka_cli("kafka-topics.sh", "--describe", "--topic", "tracker.task.events.v1")
+                rows = {}
+                for line in text.splitlines():
+                    fields = line.split()
+                    if "Partition:" in fields:
+                        partition = int(fields[fields.index("Partition:") + 1])
+                        replicas = fields[fields.index("Replicas:") + 1].split(",")
+                        isr = fields[fields.index("Isr:") + 1].split(",")
+                        rows[partition] = (int(fields[fields.index("Leader:") + 1]), len(replicas), len(isr))
+                assert len(rows) == 3
+                return text, rows
+
+            def wait_isr(expected, snapshot):
+                def ready():
+                    try:
+                        text, rows = topic_state()
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                        return False
+                    assert all(leader > 0 and rf == 3 and isr == expected for leader, rf, isr in rows.values())
+                    (LOG_DIR / snapshot).write_text(text)
+                    return True
+                until(ready)
+
+            until(lambda: pending_count() == 0)
+            wait_isr(3, "assignment-topics-before-leader-stop.txt")
+            first = offsets()
+            notices_before = count(developer)
+            create_task("NOTICE-101", developer_id)
+            until(lambda: count(developer) == notices_before + 1 and pending_count() == 0)
+            last = offsets()
+            changed = [partition for partition in last if last[partition] > first[partition]]
+            assert len(changed) == 1 and last[changed[0]] == first[changed[0]] + 1
+            partition = changed[0]
+            leader = topic_state()[1][partition][0]
+            if leader == 1:
+                broker, bootstrap = "kafka-2", "kafka-2:9094"
+            command(compose + ["stop", "-t", "10", "kafka-" + str(leader)], timeout=40)
+            try:
+                wait_isr(2, "assignment-topics-with-one-broker-down.txt")
+                create_task("NOTICE-102", developer_id)
+                until(lambda: count(developer) == notices_before + 2 and pending_count() == 0)
+            finally:
+                command(compose + ["up", "-d", "--no-deps", "--wait", "--wait-timeout", "180", "kafka-" + str(leader)], timeout=210)
+            wait_isr(3, "assignment-topics-after-leader-return.txt")
+            print(f"Assignment notification with leader kafka-{leader} of partition {partition} down; ISR 3 -> 2 -> 3: PASS", flush=True)
+
+            # Keep pagination and cursor contracts at the Gateway boundary.
+            for path in ["/api/v1/tasks?size=51", "/api/v1/labels?size=51", "/api/v1/users?size=51",
+                         "/api/v1/notifications?size=51", "/api/v1/tasks/feed?limit=51"]:
+                api("GET", path, admin, expected=400)
+            page, headers = api("GET", "/api/v1/tasks?size=1", lead)
+            assert len(page) == 1 and int(headers["X-Total-Count"]) >= 2
+            feed, headers = api("GET", "/api/v1/tasks/feed?limit=1", lead)
+            assert len(feed) == 1 and "X-Total-Count" not in headers
+            cursor = headers["X-Next-Cursor"]
+            following, headers = api("GET", "/api/v1/tasks/feed?limit=1&afterId=" + cursor, lead)
+            assert len(following) == 1 and following[0]["id"] > feed[0]["id"] and "X-Total-Count" not in headers
+            page, headers = api("GET", "/api/v1/notifications?size=1", developer)
+            assert len(page) == 1 and int(headers["X-Total-Count"]) > 1
+            api("GET", "/api/v1/labels?size=1", admin)
+
+            def without_credentials(value):
+                if isinstance(value, dict):
+                    forbidden = {"password", "passwordhash", "password_hash", "authorization", "accesstoken", "bytes"}
+                    assert not forbidden.intersection(key.lower() for key in value)
+                    for item in value.values():
+                        without_credentials(item)
+                elif isinstance(value, list):
+                    for item in value:
+                        without_credentials(item)
+
+            without_credentials(api("GET", "/api/v1/users?size=50", admin)[0])
+            without_credentials(api("GET", "/api/v1/auth/me", developer)[0])
+            for service, user, database in [("postgres", "tracker", "tracker"), ("files-db", "files", "files")]:
+                payload = command(compose + ["exec", "-T", service, "psql", "-U", user, "-d", database, "-At", "-c",
+                    "SELECT coalesce(json_agg(payload::jsonb),'[]'::json) FROM outbox_events"], capture=True, timeout=15)
+                events = json.loads(payload)
+                assert events
+                without_credentials(events)
+                assert "Bearer " not in payload
+            print("Gateway page limits/counts, cursor without count and credential-free DTO/events: PASS", flush=True)
+            print("PASS: full startup, discovery/config/docs, LR1-4 API contracts, four events, files, full/one-broker Kafka outage and DLT", flush=True)
         finally:
             try:
                 command(compose + ["logs", "--no-color"], timeout=60)
