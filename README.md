@@ -1,8 +1,10 @@
 # Task tracker — лабораторные работы по JVM
 
-Java 21, Maven, Spring Boot. После этапа 7 ЛР4 проект состоит из `user-service` (WebFlux/R2DBC), `tracker-service`, `notification-service` и `file-service` (WebFlux/JPA), Gateway, Eureka и Config Server. PostgreSQL, Redis и три брокера Kafka запускаются через Docker Compose.
+Java 21, Maven, Spring Boot. После завершения ЛР4 проект состоит из `user-service` (WebFlux/R2DBC), `tracker-service`, `notification-service` и `file-service` (WebFlux/JPA), Gateway, Eureka и Config Server. PostgreSQL, Redis и три брокера Kafka запускаются через Docker Compose.
 
 [Соответствие требованиям ЛР1–3, результаты проверки и сценарий сдачи](docs/LAB3_HANDOFF.md).
+
+[Итоговая реализация ЛР4, матрица требований и сценарий сдачи](docs/LAB4_HANDOFF.md). Полная приемка: `./scripts/lab4-acceptance.sh`; ручные запросы: [requests/lab4.http](requests/lab4.http).
 
 [План и состояние выполнения ЛР4](IMPLEMENTATION_PLAN_LAB4.md). Разработка идет по 1–2 этапа в отдельной feature-ветке; план обновляется вместе с кодом.
 
