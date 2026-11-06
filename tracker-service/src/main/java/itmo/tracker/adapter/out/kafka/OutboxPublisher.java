@@ -34,7 +34,6 @@ public class OutboxPublisher {
         this.batchSize = batchSize;
     }
 
-    // One publisher instance per service. Stop on failure to preserve aggregate order.
     public synchronized void publishBatch() {
         for (var event : outbox.pending(PageRequest.of(0, batchSize))) {
             if (event.getNextAttemptAt().isAfter(clock.instant())) {
